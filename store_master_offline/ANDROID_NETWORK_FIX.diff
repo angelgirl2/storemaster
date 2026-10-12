@@ -1,0 +1,89 @@
+--- services/local_network_sync_service.dart (original)
++++ services/local_network_sync_service.dart (fixed)
+@@ -134,7 +134,9 @@
+         if (dg == null) return;
+         try {
+           final msg = jsonDecode(utf8.decode(dg.data));
+-          if (msg is Map && msg['protocol'] == _protocol && msg['kind'] == 'discover') _announce(dg.address);
++          if (msg is Map && msg['protocol'] == _protocol && msg['kind'] == 'discover') {
++          _announce(dg.address, dg.port);
++        }
+         } catch (_) {}
+       });
+       _changeTimer = Timer.periodic(_changeInterval, (_) => _broadcastOwnChanges());
+@@ -144,28 +146,59 @@
+     }
+   }
+ 
+-  Future<void> _announce(InternetAddress target) async {
++  Future<void> _announce(InternetAddress target, int targetPort) async {
+     final license = await _localLicenseId();
+     if (license == null || license.isEmpty) return;
+     final bytes = utf8.encode(jsonEncode({'protocol': _protocol, 'kind': 'hub', 'port': wsPort, 'networkId': _networkId(license), 'storeName': await _storeName()}));
+-    _udp?.send(bytes, target, udpPort);
++    try {
++      _udp?.send(bytes, target, targetPort);
++    } catch (_) {}
+   }
+ 
+   Future<void> _startAndroidClient() async {
+-    _udp = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0, reuseAddress: true, reusePort: true);
+-    _udp!.broadcastEnabled = true;
+-    _udpSub = _udp!.listen((event) {
+-      if (event != RawSocketEvent.read) return;
+-      final dg = _udp!.receive();
+-      if (dg == null) return;
+-      try {
+-        final msg = jsonDecode(utf8.decode(dg.data));
+-        if (msg is Map && msg['protocol'] == _protocol && msg['kind'] == 'hub') _connectToHub(dg.address.address, (msg['port'] as num?)?.toInt() ?? wsPort, '${msg['networkId'] ?? ''}');
+-      } catch (_) {}
+-    });
+-    _discoverTimer = Timer.periodic(_discoveryInterval, (_) => _discover());
+-    _changeTimer = Timer.periodic(_changeInterval, (_) => _sendAndroidChanges());
+-    await _discover();
++    try {
++      // Android's Dart runtime does not support reusePort for UDP sockets.
++      // Using reusePort:true here causes EPERM/errno=1 while binding the socket.
++      // The Android side is only a temporary discovery client, so an ephemeral
++      // port (0) with both reuse flags disabled is the safest configuration.
++      _udp = await RawDatagramSocket.bind(
++        InternetAddress.anyIPv4,
++        0,
++        reuseAddress: false,
++        reusePort: false,
++      );
++      _udp!.broadcastEnabled = true;
++      _udpSub = _udp!.listen((event) {
++        if (event != RawSocketEvent.read) return;
++        final dg = _udp!.receive();
++        if (dg == null) return;
++        try {
++          final msg = jsonDecode(utf8.decode(dg.data));
++          if (msg is Map && msg['protocol'] == _protocol && msg['kind'] == 'hub') {
++            _connectToHub(
++              dg.address.address,
++              (msg['port'] as num?)?.toInt() ?? wsPort,
++              '${msg['networkId'] ?? ''}',
++            );
++          }
++        } catch (_) {}
++      });
++      _discoverTimer = Timer.periodic(_discoveryInterval, (_) => _discover());
++      _changeTimer = Timer.periodic(_changeInterval, (_) => _sendAndroidChanges());
++      await _discover();
++    } catch (e) {
++      // LAN sync must never prevent the application itself from starting.
++      // Keep the error in the status so it can be diagnosed from the UI/logs.
++      _udp?.close();
++      _udp = null;
++      await _udpSub?.cancel();
++      _udpSub = null;
++      _discoverTimer?.cancel();
++      _discoverTimer = null;
++      _changeTimer?.cancel();
++      _changeTimer = null;
++      _setStatus('lan:error:$e');
++    }
+   }
+ 
+   Future<void> _discover() async {

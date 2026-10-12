@@ -1,0 +1,90 @@
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?missing}
+      POSTGRES_USER: ${POSTGRES_USER:?missing}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing}
+      PGDATA: /var/lib/postgresql/18/docker
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_USER: ${POSTGRES_USER:?missing}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?missing}
+      DB_HOST: db
+      DB_NAME: ${POSTGRES_DB:?missing}
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 2000
+      DEFAULT_POOL_SIZE: 50
+      RESERVE_POOL_SIZE: 10
+    expose:
+      - "5432"
+
+  api:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      DatabaseMode: Online
+      ConnectionStrings__Default: Host=pgbouncer;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Pooling=true;Maximum Pool Size=100;Timeout=15;Command Timeout=30
+      Jwt__Key: ${JWT_KEY:?missing}
+      Jwt__Issuer: StoreMaster
+      Jwt__Audience: StoreMasterClient
+      Admin__Key: ${ADMIN_KEY:?missing}
+      Support__TelegramBotToken: ${SUPPORT_TELEGRAM_BOT_TOKEN:-}
+      Support__TelegramAdminChatId: ${SUPPORT_TELEGRAM_ADMIN_CHAT_ID:-}
+      Support__BaleBotToken: ${SUPPORT_BALE_BOT_TOKEN:-}
+      Support__BaleAdminChatId: ${SUPPORT_BALE_ADMIN_CHAT_ID:-}
+      Database__AutoCreate: "false"
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:?missing}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

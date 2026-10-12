@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- StoreMaster purple/dark splash background -->
+    <color name="splash_background">#08050F</color>
+
+    <color name="splash_surface">#120C1F</color>
+
+    <color name="splash_purple">#9B5CFF</color>
+
+    <color name="splash_purple_bright">#CF9BFF</color>
+
+</resources>

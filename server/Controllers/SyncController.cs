@@ -1,0 +1,7 @@
+
+using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.EntityFrameworkCore; using StoreMaster.Server.Data; using StoreMaster.Server.Models;
+namespace StoreMaster.Server.Controllers;
+[ApiController][Authorize][Route("api/v1/sync")] public class SyncController:ControllerBase{readonly StoreMasterDbContext db;public SyncController(StoreMasterDbContext db)=>this.db=db;int Sid()=>int.Parse(User.FindFirst("storeId")?.Value??"0");int Uid()=>int.Parse(User.FindFirst("sub")?.Value??"0");
+[HttpPost("push")] public async Task<IActionResult> Push(PushDto x){foreach(var c in x.Changes){db.SyncChanges.Add(new SyncChange{StoreId=Sid(),UserId=Uid(),Entity=c.Entity,Operation=c.Operation,EntityId=c.EntityId,PayloadJson=c.PayloadJson});}await db.SaveChangesAsync();return Ok(new{success=true,accepted=x.Changes.Count,lastCursor=await db.SyncChanges.Where(x=>x.StoreId==Sid()).MaxAsync(x=> (long?)x.Id)??0});}
+[HttpGet("pull")] public async Task<IActionResult> Pull(long cursor=0){var items=await db.SyncChanges.Where(x=>x.StoreId==Sid()&&x.Id>cursor).OrderBy(x=>x.Id).Take(500).Select(x=>new{id=x.Id,entity=x.Entity,operation=x.Operation,entityId=x.EntityId,payload=x.PayloadJson}).ToListAsync();return Ok(new{items,lastCursor=items.Count==0?cursor:items.Max(x=>x.id)});}}
+public record PushDto(List<ChangeDto> Changes); public record ChangeDto(string Entity,string Operation,string EntityId,string PayloadJson);

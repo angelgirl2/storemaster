@@ -1,0 +1,76 @@
+name: storemaster
+description: نرم افزار حسابداری و انبارداری
+publish_to: none
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_localizations:
+    sdk: flutter
+
+  provider: ^6.1.5+1
+  shared_preferences: ^2.5.5
+  intl: ^0.20.2
+  shamsi_date: ^1.1.1
+
+  # PDF
+  pdf: ^3.12.0
+
+  # چاپ Windows / Linux / macOS
+  printing: 5.14.3
+
+  # Excel واقعی XLSX
+  excel: ^4.0.6
+
+  # Logo / file selection
+  file_picker: ^10.3.8
+  video_player: ^2.14.0
+  video_player_media_kit: ^2.0.0
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_windows_video: ^1.0.11
+  
+  # Device / Android
+  device_info_plus: ^10.1.2
+  android_id: ^0.5.2+1
+
+  # Security / crypto
+  crypto: ^3.0.7
+  flutter_secure_storage: ^10.3.1
+  cryptography: ^2.9.0
+
+  # Shared catalog / models
+  shared:
+    path: shared
+
+  # Filesystem
+  path: ^1.9.1
+  path_provider: ^2.1.6
+
+  # SQLite offline
+  sqflite: ^2.4.3
+  sqflite_common_ffi: ^2.4.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+  # Android icon / splash
+#  flutter_native_splash: ^2.4.4
+#  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/logo.png
+    - assets/videos/splash_android.mp4
+    - assets/videos/splash_windows2.mp4

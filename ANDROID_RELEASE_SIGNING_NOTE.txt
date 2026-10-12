@@ -1,0 +1,3 @@
+Release signing prepared.
+Place your real release-key.jks in android/keystore/ and replace passwords.
+Online license code remains in project but disabled by LicenseConfig.onlineLicenseEnabled=false.

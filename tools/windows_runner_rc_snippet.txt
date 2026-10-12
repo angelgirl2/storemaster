@@ -1,0 +1,2 @@
+// In windows/runner/Runner.rc make sure this line points to the custom icon:
+IDI_APP_ICON            ICON                    "runner\\resources\\app_icon.ico"

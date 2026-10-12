@@ -1,0 +1,82 @@
+import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
+
+class VideoStoreSplash extends StatefulWidget {
+  const VideoStoreSplash({
+    super.key,
+    required this.onFinished,
+  });
+
+  final VoidCallback onFinished;
+
+  @override
+  State<VideoStoreSplash> createState() => _VideoStoreSplashState();
+}
+
+class _VideoStoreSplashState extends State<VideoStoreSplash> {
+  late VideoPlayerController _controller;
+
+  bool _finished = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = VideoPlayerController.asset(
+      'assets/videos/splash_android.mp4',
+    );
+
+    _controller.initialize().then((_) {
+      if (!mounted) return;
+
+      setState(() {});
+
+      _controller.play();
+    });
+
+    _controller.addListener(() {
+      if (!_controller.value.isInitialized) {
+        return;
+      }
+
+      if (_controller.value.position >= _controller.value.duration &&
+          !_finished) {
+        _finished = true;
+
+        widget.onFinished();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SizedBox.expand(
+        child: _controller.value.isInitialized
+            ? FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller.value.size.width,
+                  height: _controller.value.size.height,
+                  child: VideoPlayer(
+                    _controller,
+                  ),
+                ),
+              )
+            : const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                ),
+              ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+
+    super.dispose();
+  }
+}

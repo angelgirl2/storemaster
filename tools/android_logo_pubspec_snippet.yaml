@@ -1,0 +1,23 @@
+# Add to store_master_admin/pubspec.yaml
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo.png
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#111827"
+  adaptive_icon_foreground: "assets/images/logo.png"
+
+flutter_native_splash:
+  android: true
+  ios: false
+  color: "#111827"
+  image: assets/images/logo.png
+  android_12:
+    color: "#111827"
+    image: assets/images/logo.png
+    icon_background_color: "#111827"

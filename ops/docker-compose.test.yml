@@ -1,0 +1,87 @@
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env.test}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env.test}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env.test}
+      PGDATA: /var/lib/postgresql/18/docker
+    volumes:
+      - test_pgdata:/var/lib/postgresql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_USER: ${POSTGRES_USER:?set in .env.test}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set in .env.test}
+      DB_HOST: db
+      DB_NAME: ${POSTGRES_DB:?set in .env.test}
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 300
+      DEFAULT_POOL_SIZE: 30
+    expose:
+      - "5432"
+
+  api:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      DatabaseMode: Online
+      ConnectionStrings__Default: Host=pgbouncer;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Pooling=true;Maximum Pool Size=50;Timeout=15;Command Timeout=30
+      Jwt__Key: ${JWT_KEY:?set in .env.test}
+      Jwt__Issuer: StoreMaster
+      Jwt__Audience: StoreMasterClient
+      Admin__Key: ${ADMIN_KEY:?set in .env.test}
+      Support__TelegramBotToken: ${SUPPORT_TELEGRAM_BOT_TOKEN:-}
+      Support__TelegramAdminChatId: ${SUPPORT_TELEGRAM_ADMIN_CHAT_ID:-}
+      Support__BaleBotToken: ${SUPPORT_BALE_BOT_TOKEN:-}
+      Support__BaleAdminChatId: ${SUPPORT_BALE_ADMIN_CHAT_ID:-}
+      Database__AutoCreate: "false"
+      Swagger__Enabled: "true"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  pgadmin:
+    image: dpage/pgadmin4:9.17
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@local.test}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?set in .env.test}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - test_pgadmin:/var/lib/pgadmin
+
+volumes:
+  test_pgdata:
+  test_pgadmin:

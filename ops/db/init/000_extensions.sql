@@ -1,0 +1,1 @@
+-- StoreMaster uses no PostGIS spatial types; no optional extensions are required.

@@ -1,0 +1,56 @@
+# Environment secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+server/.env
+ops/.env
+ops/.env.*
+
+# Local databases and backups
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.bak
+*.backup
+
+# Signing keys / private release credentials (keep outside GitHub)
+*.jks
+*.keystore
+**/android/key.properties
+
+# Flutter/Dart build outputs and generated files
+**/.dart_tool/
+**/.pub-cache/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/
+**/coverage/
+**/windows/flutter/ephemeral/
+**/linux/flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+**/ios/Flutter/ephemeral/
+**/android/local.properties
+
+# IDE, OS and logs
+.vscode/
+.idea/
+*.iml
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+*.dmp
+core
+core.*
+
+# Compiled and packaged outputs
+*.apk
+*.aab
+*.msix
+*.exe
+*.dll
+*.pdb
+*.zip
