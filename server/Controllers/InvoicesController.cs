@@ -65,7 +65,12 @@ public sealed class InvoicesController : ControllerBase
         if (string.IsNullOrWhiteSpace(token) || token.Length > 100) return NotFound();
         var share = await db.InvoiceShares.AsNoTracking().FirstOrDefaultAsync(s => s.Token == token);
         if (share == null || share.ExpiresAt <= DateTime.UtcNow)
-            return Content("<!doctype html><html lang=\"fa\" dir=\"rtl\"><meta charset=\"utf-8\"><title>فاکتور در دسترس نیست</title><body style=\"font-family:Tahoma;padding:32px;text-align:center\"><h2>این لینک فاکتور منقضی شده یا معتبر نیست.</h2></body></html>", "text/html; charset=utf-8", System.Text.Encoding.UTF8, 404);
+            return new ContentResult
+            {
+                Content = "<!doctype html><html lang=\"fa\" dir=\"rtl\"><meta charset=\"utf-8\"><title>فاکتور در دسترس نیست</title><body style=\"font-family:Tahoma;padding:32px;text-align:center\"><h2>این لینک فاکتور منقضی شده یا معتبر نیست.</h2></body></html>",
+                ContentType = "text/html; charset=utf-8",
+                StatusCode = Microsoft.AspNetCore.Http.StatusCodes.Status404NotFound
+            };
 
         var enc = HtmlEncoder.Default;
         var items = JsonSerializer.Deserialize<List<InvoiceShareItemDto>>(share.ItemsJson) ?? new List<InvoiceShareItemDto>();
