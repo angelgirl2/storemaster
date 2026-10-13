@@ -102,6 +102,15 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// Root endpoint: this service is an API, not a hosted web frontend.
+app.MapGet("/", () => Results.Ok(new
+{
+    status = "ok",
+    service = "StoreMaster API",
+    health = "/health",
+    readiness = "/health/ready"
+}));
+
 // Initial schema is created by the PostgreSQL init scripts. The optional
 // AutoCreate switch is only for controlled local development and is disabled
 // by the test/production compose files.
