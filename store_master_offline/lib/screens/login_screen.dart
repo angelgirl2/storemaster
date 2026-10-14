@@ -7,6 +7,23 @@ import 'package:provider/provider.dart';
 
 import '../viewmodels/main_viewmodel.dart';
 
+
+// Online credentials can be copied from Persian UI text. Convert Persian/Arabic
+// numerals to ASCII before parsing user IDs or sending PINs to the API.
+String _normalizeOnlineLoginDigits(String value) {
+  final output = StringBuffer();
+  for (final rune in value.runes) {
+    if (rune >= 0x06F0 && rune <= 0x06F9) {
+      output.writeCharCode(0x30 + rune - 0x06F0);
+    } else if (rune >= 0x0660 && rune <= 0x0669) {
+      output.writeCharCode(0x30 + rune - 0x0660);
+    } else {
+      output.writeCharCode(rune);
+    }
+  }
+  return output.toString();
+}
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
@@ -57,7 +74,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       TextField(
                         controller: storeCtrl,
-                        keyboardType: TextInputType.number,
+                        keyboardType: TextInputType.text,
+                        textCapitalization: TextCapitalization.characters,
+                        autocorrect: false,
                         decoration: const InputDecoration(
                           labelText: 'کد فروشگاه',
                           prefixIcon: Icon(Icons.store),
@@ -68,7 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: userCtrl,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: 'شناسه کاربر',
+                          labelText: 'شناسه کاربر (مثلاً 1)',
                           prefixIcon: Icon(Icons.person_outline),
                         ),
                       ),
@@ -77,9 +96,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: pinCtrl,
                         keyboardType: TextInputType.number,
                         obscureText: true,
-                        maxLength: 6,
+                        maxLength: 8,
                         decoration: const InputDecoration(
-                          labelText: 'پین‌کد',
+                          labelText: 'پین‌کد (۴ تا ۸ رقم)',
                           prefixIcon: Icon(Icons.lock_outline),
                         ),
                       ),
@@ -105,14 +124,32 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: busy
                         ? null
                         : () async {
-                            final store = storeCtrl.text.trim();
-                            final uid = int.tryParse(userCtrl.text.trim());
-                            final pin = pinCtrl.text.trim();
+                            final store = _normalizeOnlineLoginDigits(
+                              storeCtrl.text.trim(),
+                            ).toUpperCase();
+                            final userIdText = _normalizeOnlineLoginDigits(
+                              userCtrl.text.trim(),
+                            );
+                            final uid = int.tryParse(userIdText);
+                            final pin = _normalizeOnlineLoginDigits(
+                              pinCtrl.text.trim(),
+                            );
 
-                            if (store.isEmpty || uid == null || pin.isEmpty) {
+                            if (store.isEmpty) {
                               setDialogState(() {
-                                error =
-                                    'کد فروشگاه، شناسه کاربر و پین الزامی است';
+                                error = 'کد فروشگاه را وارد کنید.';
+                              });
+                              return;
+                            }
+                            if (uid == null || uid <= 0) {
+                              setDialogState(() {
+                                error = 'شناسه کاربر باید عددی و بزرگ‌تر از صفر باشد؛ همان شناسه درج‌شده در اطلاعات ورود را وارد کنید.';
+                              });
+                              return;
+                            }
+                            if (!RegExp(r'^\d{4,8}$').hasMatch(pin)) {
+                              setDialogState(() {
+                                error = 'رمز آنلاین باید بین ۴ تا ۸ رقم باشد.';
                               });
                               return;
                             }
