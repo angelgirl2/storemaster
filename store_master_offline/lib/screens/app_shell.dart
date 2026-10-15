@@ -35,7 +35,7 @@ class _AppShellState extends State<AppShell> {
     // Periodic local license validation must not replace the visible page
     // with a spinner. A previously valid status remains visible while a
     // background check is running.
-    _licenseTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    _licenseTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _refreshLicense();
     });
   }

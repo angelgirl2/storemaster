@@ -122,6 +122,14 @@ class _CustomSaleDialogState extends State<_CustomSaleDialog> {
       setState(() => _error = 'حداقل یک قلم به فاکتور اضافه کنید.');
       return;
     }
+    if (_method == 'CREDIT' && _customer == null) {
+      setState(() => _error = 'برای ثبت نسیه، مشتری یا طرف حساب را انتخاب کنید.');
+      return;
+    }
+    if (_method == 'CREDIT' && _paid > 0) {
+      setState(() => _error = 'برای ثبت نسیه، مبلغ دریافتی باید صفر باشد.');
+      return;
+    }
     final customId = int.tryParse(_numberCtrl.text.trim());
     if (customId != null &&
         widget.vm.transactions.any((t) => t.id == customId)) {
@@ -327,7 +335,7 @@ class _CustomSaleDialogState extends State<_CustomSaleDialog> {
                     value: null,
                     child: Text('مشتری آزاد / عمومی'),
                   ),
-                  for (final c in widget.vm.allContacts)
+                  for (final c in widget.vm.allContacts.where((c) => c.type == 'CUSTOMER' || c.type == 'BOTH'))
                     DropdownMenuItem<Contact?>(
                       value: c,
                       child: Text(c.name, overflow: TextOverflow.ellipsis),

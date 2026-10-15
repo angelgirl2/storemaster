@@ -115,7 +115,7 @@ class _PosScreenState extends State<PosScreen> {
         actions: [
           if (_lastTransactionId != null)
             IconButton(
-              tooltip: 'چاپ آخرین فاکتور ثبت‌شده',
+              tooltip: 'چاپ آخرین رسید ثبت‌شده',
               icon: const Icon(Icons.print_outlined),
               onPressed: () {
                 final transaction = _findTransaction(vm, _lastTransactionId!);
@@ -388,18 +388,14 @@ class _PosScreenState extends State<PosScreen> {
 
             if (mounted) {
               setState(() => _lastTransactionId = transactionId);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('فروش با شماره فاکتور ${_invoiceLabel(vm, transactionId)} ثبت شد. برای چاپ، دکمه چاپ آخرین فاکتور را بزنید.'),
-                  action: SnackBarAction(
-                    label: 'چاپ',
-                    onPressed: () {
-                      final transaction = _findTransaction(vm, transactionId);
-                      if (transaction != null) _printInvoice(context, vm, transaction);
-                    },
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  SnackBar(
+                    content: Text('فروش با شماره فاکتور ${_invoiceLabel(vm, transactionId)} ثبت شد. برای چاپ رسید، دکمه چاپ آخرین رسید را بزنید.'),
+                    duration: const Duration(seconds: 3),
                   ),
-                ),
-              );
+                );
             }
             return true;
           },
@@ -458,7 +454,6 @@ class _PosScreenState extends State<PosScreen> {
         : transaction.userName;
 
     final file = await Exporter.exportThermalReceiptPdf(
-      filenamePrefix: 'رسید_حرارتی_${transaction.id}',
       storeName: vm.config?.storeName ?? 'فروشگاه',
       storePhone: vm.config?.storePhone ?? '',
       businessTitle: vm.config?.businessTitle ?? 'فروشگاه',
@@ -496,7 +491,7 @@ class _PosScreenState extends State<PosScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(printed
-            ? 'فاکتور ${transaction.invoiceNumber.isEmpty ? '#${transaction.id}' : 'شماره ${transaction.invoiceNumber}'} برای چاپ ارسال شد.'
+            ? 'رسید ${transaction.invoiceNumber.isEmpty ? '#${transaction.id}' : 'شماره ${transaction.invoiceNumber}'} برای چاپ ارسال شد.'
             : 'پنجره چاپ باز نشد؛ فایل رسید ذخیره شده است.'),
       ),
     );

@@ -550,7 +550,53 @@ class LicenseService {
     try {
       final db = await _db.database;
       final map = await _readLicenseSettings(db);
-      final latchedExpired = (map[_expiredLatchKey] ?? '') == '1';
+      var latchedExpired = (map[_expiredLatchKey] ?? '') == '1';
+      // An online-session license can be renewed remotely under the same ID.
+      // If its local expiry was latched earlier, ask the authoritative server
+      // before keeping the app locked. Signed offline license files still need
+      // their renewed license document activated locally.
+      if (latchedExpired &&
+          (map[_payloadKey] ?? '').trim().isEmpty &&
+          OnlineApiService.onlineEnabled) {
+        final session = await OnlineSessionStore.instance.read();
+        final licenseId = '${session['licenseId'] ?? ''}'.trim();
+        if (licenseId.isNotEmpty) {
+          try {
+            final deviceId = await getDeviceId();
+            final remote = await OnlineApiService.instance.publicLicenseValidate(
+              licenseId: licenseId,
+              deviceId: deviceId,
+            );
+            final remoteExpiry = (remote['licenseExpiresAt'] as num?)?.toInt() ?? 0;
+            if (remote['valid'] == true &&
+                '${remote['status'] ?? 'ACTIVE'}'.toUpperCase() == 'ACTIVE' &&
+                remoteExpiry > DateTime.now().millisecondsSinceEpoch) {
+              await db.delete(
+                'app_settings',
+                where: 'key = ?',
+                whereArgs: [_expiredLatchKey],
+              );
+              map.remove(_expiredLatchKey);
+              latchedExpired = false;
+              await OnlineSessionStore.instance.save({
+                ...session,
+                'licenseStatus': 'ACTIVE',
+                'licenseExpiresAt': remoteExpiry,
+                'licensePlan': remote['licensePlan'] ?? session['licensePlan'],
+                'features': remote['features'] ?? session['features'] ?? const [],
+                'businessTypes': remote['businessTypes'] ?? session['businessTypes'] ?? const [],
+              });
+            }
+          } catch (e) {
+            if (e is ApiException && const {401, 403, 404}.contains(e.statusCode)) {
+              return LicenseStatus(
+                valid: false,
+                message: 'لایسنس یا دستگاه از طرف سرور غیرفعال/لغو شده است (${e.statusCode}).',
+              );
+            }
+          }
+        }
+      }
       if (latchedExpired) {
         return const LicenseStatus(
           valid: false,
@@ -590,27 +636,70 @@ class LicenseService {
         if ((OnlineConfig.instance.required || !OnlineConfig.instance.baseUrl.contains('YOUR-DOMAIN')) && OnlineApiService.onlineEnabled) {
           final session = await OnlineSessionStore.instance.read();
           final onlineStatus = '${session['licenseStatus'] ?? ''}'.toUpperCase();
-          final onlineExpires = (session['licenseExpiresAt'] as num?)?.toInt() ?? 0;
-          final onlineFeatures = List<String>.from((session['features'] as List?) ?? const []);
-          final onlineBusinessTypes = List<String>.from((session['businessTypes'] as List?) ?? <dynamic>[config?.storeType ?? 'GENERAL']);
+          final cachedExpires = (session['licenseExpiresAt'] as num?)?.toInt() ?? 0;
+          var effectiveExpires = cachedExpires;
+          var onlineFeatures = List<String>.from((session['features'] as List?) ?? const []);
+          var onlineBusinessTypes = List<String>.from((session['businessTypes'] as List?) ?? <dynamic>[config?.storeType ?? 'GENERAL']);
           final onlineDevice = await getDeviceId();
+          final onlineLicenseId = '${session['licenseId'] ?? ''}'.trim();
           final onlineNow = wallNow;
-          if (onlineExpires > 0 && onlineExpires <= onlineNow) {
+
+          if (onlineStatus == 'ACTIVE' && onlineFeatures.isNotEmpty) {
+            try {
+              // Validate the exact license bound to this session, not merely
+              // the newest license belonging to the store.
+              final remote = onlineLicenseId.isNotEmpty
+                  ? await OnlineApiService.instance.publicLicenseValidate(
+                      licenseId: onlineLicenseId,
+                      deviceId: onlineDevice,
+                    )
+                  : await OnlineApiService.instance.licenseStatus();
+              final remoteStatus = '${remote['status'] ?? 'ACTIVE'}'.toUpperCase();
+              if (remote['valid'] != true || remoteStatus != 'ACTIVE') {
+                return LicenseStatus(
+                  valid: false,
+                  message: 'لایسنس آنلاین توسط سرور فعال نیست: $remoteStatus',
+                );
+              }
+              final serverExpiry = (remote['licenseExpiresAt'] as num?)?.toInt() ?? 0;
+              if (serverExpiry > 0) effectiveExpires = serverExpiry;
+              final remoteFeatures = remote['features'];
+              if (remoteFeatures is List && remoteFeatures.isNotEmpty) {
+                onlineFeatures = List<String>.from(remoteFeatures);
+              }
+              final remoteBusinesses = remote['businessTypes'];
+              if (remoteBusinesses is List && remoteBusinesses.isNotEmpty) {
+                onlineBusinessTypes = List<String>.from(remoteBusinesses);
+              }
+              await OnlineSessionStore.instance.save({
+                ...session,
+                'licenseStatus': 'ACTIVE',
+                'licenseExpiresAt': effectiveExpires,
+                'licenseId': remote['licenseId'] ?? onlineLicenseId,
+                'licensePlan': remote['licensePlan'] ?? session['licensePlan'] ?? 'TRIAL',
+                'features': onlineFeatures,
+                'businessTypes': onlineBusinessTypes,
+              });
+            } catch (e) {
+              // Explicit authorization/not-found responses are definitive remote
+              // rejections. Only connectivity errors may use a cached offline license.
+              if (e is ApiException && const {401, 403, 404}.contains(e.statusCode)) {
+                return LicenseStatus(
+                  valid: false,
+                  message: 'دسترسی لایسنس یا این دستگاه توسط سرور رد شد (${e.statusCode}).',
+                );
+              }
+              if (OnlineConfig.instance.required) rethrow;
+            }
+          }
+
+          if (effectiveExpires > 0 && effectiveExpires <= onlineNow) {
             await db.insert('app_settings', {'key': _expiredLatchKey, 'value': '1'}, conflictAlgorithm: ConflictAlgorithm.replace);
             return const LicenseStatus(valid: false, message: 'اعتبار لایسنس آنلاین به پایان رسیده است.');
           }
-          if (onlineStatus == 'ACTIVE' && onlineExpires > onlineNow && onlineFeatures.isNotEmpty) {
-            try {
-              final remote = await OnlineApiService.instance.licenseStatus();
-              final remoteStatus = '${remote['status'] ?? onlineStatus}'.toUpperCase();
-              if (remoteStatus != 'ACTIVE') {
-                return LicenseStatus(valid:false, message:'لایسنس آنلاین توسط سرور فعال نیست: $remoteStatus');
-              }
-            } catch (_) {
-              if (OnlineConfig.instance.required) rethrow;
-            }
+          if (onlineStatus == 'ACTIVE' && effectiveExpires > onlineNow && onlineFeatures.isNotEmpty) {
             final synthetic = LicensePayload(
-              licenseId: '${session['licenseId'] ?? ''}',
+              licenseId: onlineLicenseId,
               customerName: '${session['storeName'] ?? ''}',
               phone: '',
               businessTypes: onlineBusinessTypes,
@@ -618,14 +707,14 @@ class LicenseService {
               platform: _currentPlatform(),
               plan: '${session['licensePlan'] ?? 'TRIAL'}',
               durationDays: 15,
-              issuedAt: onlineExpires - const Duration(days:15).inMilliseconds,
-              expiresAt: onlineExpires,
+              issuedAt: effectiveExpires - const Duration(days:15).inMilliseconds,
+              expiresAt: effectiveExpires,
               priceAtPurchase: 0,
               currency: config?.currency ?? 'تومان',
               features: onlineFeatures,
             );
             await _recordClock(db, wallNow);
-            return LicenseStatus(valid:true, message:'لایسنس آنلاین معتبر است.', payload:synthetic, remainingDays:((onlineExpires - wallNow) / Duration.millisecondsPerDay).ceil());
+            return LicenseStatus(valid:true, message:'لایسنس آنلاین معتبر است.', payload:synthetic, remainingDays:((effectiveExpires - wallNow) / Duration.millisecondsPerDay).ceil());
           }
         }
         final currentDeviceForTrial = await getDeviceId();
@@ -695,7 +784,18 @@ class LicenseService {
             return LicenseStatus(valid:false, message:'لایسنس توسط سرور فعال نیست: ${remote['status'] ?? 'EXPIRED'}', payload:payload);
           }
         } catch(e) {
-          if (OnlineConfig.instance.required) return LicenseStatus(valid:false, message:'اتصال به سرور لایسنس برقرار نشد: $e', payload:payload);
+          // Do not ignore a definitive rejection from the API; keep offline
+          // fallback only for transport/server outages, not revoked devices.
+          if (e is ApiException && const {401, 403, 404}.contains(e.statusCode)) {
+            return LicenseStatus(
+              valid: false,
+              message: 'لایسنس یا دستگاه از طرف سرور غیرفعال/لغو شده است (${e.statusCode}).',
+              payload: payload,
+            );
+          }
+          if (OnlineConfig.instance.required) {
+            return LicenseStatus(valid:false, message:'اتصال به سرور لایسنس برقرار نشد: $e', payload:payload);
+          }
         }
       }
 

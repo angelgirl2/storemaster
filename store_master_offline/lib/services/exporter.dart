@@ -76,6 +76,70 @@ class Exporter {
     return d;
   }
 
+  /// Receipt PDFs are separated by their payment method.
+  /// Windows: Documents\storemaster\<category>
+  /// Android: public Downloads\storemaster when the platform exposes it;
+  /// otherwise the app's external files area is used to avoid broad storage
+  /// permissions on modern Android versions.
+  static Future<Directory> _receiptExportDir({
+    required String paymentMethod,
+    required double debtAmount,
+  }) async {
+    final method = paymentMethod.trim().toUpperCase();
+    final String category;
+    switch (method) {
+      case 'TRANSFER':
+        category = 'کارت به کارت';
+        break;
+      case 'CREDIT':
+        category = 'کارت نسیه';
+        break;
+      case 'CARD':
+        category = 'کارتخوان';
+        break;
+      case 'CASH':
+        category = 'نقدی';
+        break;
+      case 'MIXED':
+        // Keep to the four requested folders; if debt remains, classify it
+        // with credit receipts, otherwise put it in the cash folder.
+        category = debtAmount > 0.0001 ? 'کارت نسیه' : 'نقدی';
+        break;
+      default:
+        category = debtAmount > 0.0001 ? 'کارت نسیه' : 'نقدی';
+    }
+
+    late Directory root;
+    if (Platform.isWindows) {
+      final documents = await getApplicationDocumentsDirectory();
+      root = Directory(p.join(documents.path, 'storemaster'));
+    } else if (Platform.isAndroid) {
+      Directory? downloads;
+      try {
+        downloads = await getDownloadsDirectory();
+      } catch (_) {
+        // Some Android versions/providers do not expose Downloads via the
+        // cross-platform path_provider API.
+      }
+      if (downloads != null) {
+        root = Directory(p.join(downloads.path, 'storemaster'));
+      } else {
+        final external = await getExternalStorageDirectory();
+        final base = external ?? await getApplicationDocumentsDirectory();
+        root = Directory(p.join(base.path, 'storemaster'));
+      }
+    } else {
+      final documents = await getApplicationDocumentsDirectory();
+      root = Directory(p.join(documents.path, 'storemaster'));
+    }
+
+    final categoryDir = Directory(p.join(root.path, category));
+    if (!await categoryDir.exists()) {
+      await categoryDir.create(recursive: true);
+    }
+    return categoryDir;
+  }
+
   static String _sanitizeFileName(String s) {
     final cleaned = s.replaceAll(RegExp(r'[^a-zA-Z0-9آ-ی\-_\. ]'), '_');
     return cleaned.length > 60 ? cleaned.substring(0, 60) : cleaned;
@@ -345,7 +409,8 @@ class Exporter {
   <div class="row-flex"><span>پرداختی:</span><span>${nf.format(paidAmount)} $currency</span></div>
   ${debtAmount > 0 ? "<div class='row-flex bold' style='color:red;'><span>مانده نسیه (بدهی):</span><span>${nf.format(debtAmount)} $currency</span></div>" : ''}
   <div class="dashed"></div>
-  <div class="text-center" style="font-size:10px; margin-top:6px;">از خرید و اعتماد شما متشکریم</div>
+  <div class="text-center bold" style="font-size:10px; margin-top:6px;">با تشکر از اعتماد شما، از خریدتان سپاسگزاریم</div>
+  <div class="text-center" style="font-size:9px; margin-top:3px;">${HtmlEscaper().convert(storeName.trim().isEmpty ? 'فروشگاه' : storeName.trim())}</div>
 </body>
 </html>''';
   }
@@ -442,7 +507,7 @@ class Exporter {
     <div><strong>پرداختی:</strong> ${nf.format(paidAmount)} $currency</div>
     ${debtAmount > 0 ? "<div style='color:red;'><strong>باقی‌مانده (بدهی):</strong> ${nf.format(debtAmount)} $currency</div>" : ''}
   </div>
-  <div class="footer"><p>با تشکر از خرید شما - ${HtmlEscaper().convert(storeName)}</p></div>
+  <div class="footer"><p>با تشکر از اعتماد شما، از خریدتان سپاسگزاریم</p><p>${HtmlEscaper().convert(storeName.trim().isEmpty ? 'فروشگاه' : storeName.trim())}</p></div>
 </body>
 </html>''';
   }
@@ -592,6 +657,14 @@ class Exporter {
         '/System/Library/Fonts/Supplemental/Arial.ttf',
         '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
       ],
+      if (Platform.isAndroid) ...[
+        '/system/fonts/NotoNaskhArabicUI-Regular.ttf',
+        '/system/fonts/NotoNaskhArabic-Regular.ttf',
+        '/system/fonts/NotoSansArabicUI-Regular.ttf',
+        '/system/fonts/NotoSansArabic-Regular.ttf',
+        '/system/fonts/DroidSansArabic.ttf',
+        '/system/fonts/DroidSansFallback.ttf',
+      ],
     ];
     final boldCandidates = <String>[
       if (Platform.isWindows) ...[
@@ -606,14 +679,25 @@ class Exporter {
       if (Platform.isMacOS) ...[
         '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
       ],
+      if (Platform.isAndroid) ...[
+        '/system/fonts/NotoNaskhArabicUI-Bold.ttf',
+        '/system/fonts/NotoNaskhArabic-Bold.ttf',
+        '/system/fonts/NotoSansArabicUI-Bold.ttf',
+        '/system/fonts/NotoSansArabic-Bold.ttf',
+      ],
     ];
 
     Future<pw.Font?> loadFirst(List<String> paths) async {
       for (final path in paths) {
-        final f = File(path);
-        if (await f.exists()) {
-          final bytes = await f.readAsBytes();
-          return pw.Font.ttf(bytes.buffer.asByteData());
+        try {
+          final f = File(path);
+          if (await f.exists()) {
+            final bytes = await f.readAsBytes();
+            return pw.Font.ttf(bytes.buffer.asByteData());
+          }
+        } catch (_) {
+          // Try the next installed system font if a font cannot be read or
+          // parsed on this OS/device.
         }
       }
       return null;
@@ -1458,13 +1542,13 @@ class Exporter {
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         _pdfText(
-                          'با تشکر از اعتماد شما',
+                          'با تشکر از اعتماد شما، از خریدتان سپاسگزاریم',
                           bold,
                           size: 8,
                           color: accentDark,
                         ),
                         _pdfText(
-                          storeName.trim().isEmpty ? 'با تشکر از خرید شما' : 'صادرشده توسط ${storeName.trim()}',
+                          storeName.trim().isEmpty ? 'فروشگاه' : storeName.trim(),
                           regular,
                           size: 7.5,
                           color: PdfColors.grey700,
@@ -1506,7 +1590,6 @@ class Exporter {
   }
 
   static Future<File?> exportThermalReceiptPdf({
-    required String filenamePrefix,
     required String storeName,
     required String storePhone,
     String businessTitle = 'فروشگاه',
@@ -1535,19 +1618,21 @@ class Exporter {
     double customHeightMm = 220.0,
   }) async {
     try {
-      final dir = await _exportDir();
-      final stamp = DateTime.now().millisecondsSinceEpoch;
-      final file = File(p.join(
-        dir.path,
-        '${_sanitizeFileName(filenamePrefix)}_$stamp.pdf',
-      ));
+      final dir = await _receiptExportDir(
+        paymentMethod: paymentMethod,
+        debtAmount: debtAmount,
+      );
+      final invoiceLabel = invoiceNumber.trim().isEmpty
+          ? transactionId.toString()
+          : invoiceNumber.trim();
+      // A stable name keeps one current PDF per transaction. Pressing Print
+      // again replaces that receipt instead of creating timestamped duplicates.
+      final receiptName = 'رسید_${_sanitizeFileName(invoiceLabel)}_شناسه_$transactionId.pdf';
+      final file = File(p.join(dir.path, receiptName));
       final fonts = await _loadPdfFonts();
       final regular = fonts['regular']!;
       final bold = fonts['bold']!;
       final nf = NumberFormat('#,##0', 'en_US');
-      final invoiceLabel = invoiceNumber.trim().isEmpty
-          ? transactionId.toString()
-          : invoiceNumber.trim();
       final isPurchase = invoiceType.toUpperCase() == 'PURCHASE';
       final documentTitle = isPurchase ? 'رسید خرید' : 'رسید فروش';
       final customerLabel = isPurchase ? 'تأمین‌کننده' : 'مشتری';
@@ -1632,16 +1717,6 @@ class Exporter {
             marginMm: marginMm,
             customWidthMm: customWidthMm,
             customHeightMm: customHeightMm,
-          ),
-          footer: (context) => pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 5),
-            child: _pdfText(
-              '$storeName  •  $documentTitle  •  ${context.pageNumber}',
-              regular,
-              size: 5.8,
-              color: PdfColors.grey600,
-              align: pw.TextAlign.center,
-            ),
           ),
           build: (context) => [
             pw.Directionality(
@@ -1802,9 +1877,20 @@ class Exporter {
                     ),
                   pw.SizedBox(height: 7),
                   line(color: PdfColors.grey500, width: 0.7),
-                  _pdfText('از اعتماد و خرید شما سپاسگزاریم', bold, size: 8, align: pw.TextAlign.center),
-                  pw.SizedBox(height: 2),
-                  _pdfText('از اعتماد و خرید شما سپاسگزاریم', regular, size: 5.9, color: PdfColors.grey600, align: pw.TextAlign.center),
+                  _pdfText(
+                    'با تشکر از اعتماد شما، از خریدتان سپاسگزاریم',
+                    bold,
+                    size: 8,
+                    align: pw.TextAlign.center,
+                  ),
+                  pw.SizedBox(height: 3),
+                  _pdfText(
+                    storeName.trim().isEmpty ? 'فروشگاه' : storeName.trim(),
+                    regular,
+                    size: 7,
+                    color: PdfColors.grey600,
+                    align: pw.TextAlign.center,
+                  ),
                 ],
               ),
             ),

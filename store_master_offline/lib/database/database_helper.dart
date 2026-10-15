@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._();
 
   Database? _db;
-  static const int _version = 24;
+  static const int _version = 25;
   static const String _dbName = 'storemaster_database.db';
 
   Future<String> get databasePath async => await _resolvePath();
@@ -364,17 +364,15 @@ class DatabaseHelper {
           ? 'id'
           : (cols.firstWhere((x) => (x['pk'] as num? ?? 0) > 0,
               orElse: () => cols.first)['name'] as String);
-      String ver;
-      if (names.contains('updatedAt'))
-        ver = "COALESCE(NEW.\"updatedAt\", strftime('%s','now')*1000)";
-      else if (names.contains('createdAt'))
-        ver = "COALESCE(NEW.\"createdAt\", strftime('%s','now')*1000)";
-      else if (names.contains('dateMillis'))
-        ver = "COALESCE(NEW.\"dateMillis\", strftime('%s','now')*1000)";
-      else if (names.contains('timestamp'))
-        ver = "COALESCE(NEW.\"timestamp\", strftime('%s','now')*1000)";
-      else
-        ver = "strftime('%s','now')*1000";
+      // Version sync changes by the local mutation time, not the business date.
+      // Otherwise editing a back-dated invoice could be ignored by the server.
+      final versionParts = <String>["CAST(strftime('%s','now') AS INTEGER)*1000"];
+      for (final candidate in ['updatedAt', 'createdAt', 'dateMillis', 'timestamp']) {
+        if (names.contains(candidate)) {
+          versionParts.add('COALESCE(NEW."$candidate", 0)');
+        }
+      }
+      final ver = 'MAX(${versionParts.join(',')})';
       final jnew = names.map((n) => "'$n', NEW.\"$n\"").join(',');
       final settingGuard = table == 'app_settings'
           ? " AND COALESCE(NEW.key, '') NOT IN ('local_sync_device_id','license_payload','license_signature','license_last_clock','license_expired_latched','local_trial_payload')"

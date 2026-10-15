@@ -83,6 +83,8 @@ class MainViewModel extends ChangeNotifier {
     StoreRepository? repository,
   }) : _repo = repository ?? StoreRepository() {
     LocalNetworkSyncService.instance.addListener(_onLocalNetworkSyncChanged);
+    _cloudSyncSubscription =
+        CloudSyncService.instance.changes.listen(_onCloudSyncChanged);
   }
   final StoreRepository _repo;
 
@@ -121,6 +123,8 @@ class MainViewModel extends ChangeNotifier {
   bool _disposed = false;
   Timer? _syncTimer;
   Timer? _localRefreshTimer;
+  Timer? _cloudRefreshTimer;
+  StreamSubscription<int>? _cloudSyncSubscription;
   int _lastLocalSyncChangeVersion = 0;
 
   // --------------------------------------------------------------------------
@@ -268,12 +272,28 @@ class MainViewModel extends ChangeNotifier {
     });
   }
 
+
+  void _onCloudSyncChanged(int _) {
+    if (_disposed || _currentUser == null) return;
+    _cloudRefreshTimer?.cancel();
+    _cloudRefreshTimer = Timer(const Duration(milliseconds: 250), () async {
+      if (_disposed) return;
+      if (_isLoading) {
+        _onCloudSyncChanged(0);
+        return;
+      }
+      await loadAll(showLoading: false);
+    });
+  }
+
   @override
   void dispose() {
     LocalNetworkSyncService.instance.removeListener(_onLocalNetworkSyncChanged);
+    _cloudSyncSubscription?.cancel();
     _disposed = true;
     _syncTimer?.cancel();
     _localRefreshTimer?.cancel();
+    _cloudRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -362,15 +382,15 @@ class MainViewModel extends ChangeNotifier {
         _isLoading = false;
       }
       _notify();
+      // Most write operations finish by refreshing this ViewModel. Kick off
+      // cloud sync here so non-sale updates also leave the device immediately.
+      if (!_hasLoadError && _currentUser != null) {
+        CloudSyncService.instance.requestSync();
+      }
     }
   }
 
   Future<void> refreshAfterChange() async {
-    if (OnlineApiService.onlineEnabled && OnlineApiService.instance.isAuthenticated) {
-      try {
-        await CloudSyncService.instance.syncAll();
-      } catch (_) {}
-    }
     await loadAll();
   }
 
@@ -1417,6 +1437,12 @@ class MainViewModel extends ChangeNotifier {
     if (!paidAmount.isFinite || paidAmount < 0) {
       throw ArgumentError('مبلغ پرداختی معتبر نیست.');
     }
+    if (_paymentMethod == 'CREDIT' && _selectedCustomer == null) {
+      throw StateError('برای ثبت نسیه باید مشتری یا طرف حساب انتخاب شود.');
+    }
+    if (_paymentMethod == 'CREDIT' && paidAmount > 0) {
+      throw StateError('برای ثبت نسیه، مبلغ دریافتی باید صفر باشد.');
+    }
 
     _isCheckingOut = true;
     _notify();
@@ -1475,7 +1501,11 @@ class MainViewModel extends ChangeNotifier {
       clearCart(notify: false);
       _userMessage = 'فاکتور #$transactionId با موفقیت ثبت شد';
       await loadAll();
-
+      // Keep a categorized PDF receipt for the new sale even if the user does
+      // not immediately open the print dialog. Receipt creation is best-effort
+      // and must never undo a committed sale.
+      await _saveReceiptPdfForTransaction(transactionId);
+      // loadAll kicks off cloud sync only after the local transaction is committed.
       return transactionId;
     } finally {
       _isCheckingOut = false;
@@ -1501,6 +1531,12 @@ class MainViewModel extends ChangeNotifier {
 
     if (items.isEmpty) {
       throw ArgumentError('اقلام فاکتور خرید/فروش دلخواه خالی است.');
+    }
+    if (paymentMethod == 'CREDIT' && customer == null) {
+      throw StateError('برای ثبت فاکتور نسیه باید مشتری یا طرف حساب انتخاب شود.');
+    }
+    if (paymentMethod == 'CREDIT' && paidAmount > 0) {
+      throw StateError('برای ثبت فاکتور نسیه، مبلغ دریافتی باید صفر باشد.');
     }
 
     double subtotal = 0.0;
@@ -1538,6 +1574,7 @@ class MainViewModel extends ChangeNotifier {
     final transactionId = await _repo.recordSale(transaction, items);
     _userMessage = 'فاکتور دلخواه #$transactionId با موفقیت ثبت شد';
     await loadAll();
+    await _saveReceiptPdfForTransaction(transactionId);
     return transactionId;
   }
 
@@ -1545,6 +1582,63 @@ class MainViewModel extends ChangeNotifier {
     int transactionId,
   ) {
     return _repo.getTransactionItems(transactionId);
+  }
+
+  /// Saves the receipt immediately after an invoice is committed locally.
+  /// The method intentionally swallows errors: a receipt export issue must not
+  /// make the cashier think that a successful sale or purchase was rolled back.
+  Future<void> _saveReceiptPdfForTransaction(int transactionId) async {
+    try {
+      StoreTransaction? transaction;
+      for (final candidate in _transactions) {
+        if (candidate.id == transactionId) {
+          transaction = candidate;
+          break;
+        }
+      }
+      if (transaction == null) return;
+
+      final config = _config;
+      final items = await _repo.getTransactionItems(transactionId);
+      final paper = config?.printPaperSize;
+      await Exporter.exportThermalReceiptPdf(
+        storeName: config?.storeName ?? 'فروشگاه',
+        storePhone: config?.storePhone ?? '',
+        businessTitle: config?.businessTitle ?? 'فروشگاه',
+        logoBase64: config?.logoBase64 ?? '',
+        transactionId: transaction.id,
+        invoiceNumber: transaction.invoiceNumber,
+        dateStr: faDateTime(
+          DateTime.fromMillisecondsSinceEpoch(transaction.dateMillis),
+        ),
+        customerName: transaction.contactName.trim().isEmpty
+            ? (transaction.type.toUpperCase() == 'PURCHASE'
+                ? 'تأمین‌کننده عمومی'
+                : 'مشتری حضوری')
+            : transaction.contactName,
+        userName: transaction.userName.trim().isEmpty
+            ? (_currentUser?.name ?? 'فروشنده')
+            : transaction.userName,
+        items: items
+            .map((item) => [item.productName, item.quantity, item.unitPrice])
+            .toList(),
+        totalAmount: transaction.totalAmount,
+        discount: transaction.discount,
+        finalAmount: transaction.finalAmount,
+        paidAmount: transaction.paidAmount,
+        debtAmount: transaction.debtAmount,
+        currency: config?.currency ?? 'تومان',
+        paymentMethod: transaction.paymentMethod,
+        invoiceType: transaction.type,
+        paperSize: paper == 'R58' || paper == 'R80' ? paper! : 'R80',
+        orientation: 'PORTRAIT',
+        marginMm: 3.0,
+        customWidthMm: config?.customPaperWidthMm ?? 80.0,
+        customHeightMm: config?.customPaperHeightMm ?? 220.0,
+      );
+    } catch (_) {
+      // Saving a receipt is best-effort; the transaction is already stored.
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -1609,6 +1703,7 @@ class MainViewModel extends ChangeNotifier {
 
     _userMessage = 'فاکتور خرید #$transactionId ثبت شد';
     await loadAll();
+    await _saveReceiptPdfForTransaction(transactionId);
 
     return transactionId;
   }

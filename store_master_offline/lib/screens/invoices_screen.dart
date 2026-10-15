@@ -11,6 +11,7 @@ import '../utils/shamsi_date_utils.dart';
 import '../utils/persian_date_picker.dart';
 
 import '../models/store_transaction.dart';
+import '../models/contact.dart';
 import '../models/transaction_item.dart';
 import '../services/exporter.dart';
 import '../services/online_api_service.dart';
@@ -27,6 +28,7 @@ class InvoicesScreen extends StatefulWidget {
 class _InvoicesScreenState extends State<InvoicesScreen> {
   bool _isPurchaseDialogOpen = false;
   final Set<int> _printingInvoiceIds = <int>{};
+  final Set<int> _printingReceiptIds = <int>{};
   final Set<int> _sendingInvoiceIds = <int>{};
   final Set<int> _mutatingInvoiceIds = <int>{};
 
@@ -45,6 +47,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     final draftItems = <TransactionItem>[];
     var dateTime = DateTime.now();
     dynamic selectedProduct = vm.products.first;
+    Contact? selectedCustomer;
+    String paymentMethod = 'CASH';
     bool isSaving = false;
 
     double subtotal() => draftItems.fold<double>(0, (sum, item) => sum + item.totalPrice);
@@ -166,8 +170,43 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       Row(children: [
                         Expanded(child: TextField(controller: discount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'تخفیف'), onChanged: (_) => setDialogState(() {}))),
                         const SizedBox(width: 8),
-                        Expanded(child: TextField(controller: paid, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'مبلغ دریافتی'))),
+                        Expanded(child: TextField(controller: paid, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'مبلغ دریافتی'), onChanged: (_) => setDialogState(() {}))),
                       ]),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text('مشتری / طرف حساب', style: Theme.of(ctx).textTheme.labelLarge),
+                      ),
+                      const SizedBox(height: 4),
+                      DropdownButtonFormField<Contact?>(
+                        initialValue: selectedCustomer,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          hintText: 'انتخاب مشتری (برای نسیه الزامی است)',
+                          prefixIcon: Icon(Icons.person_outline),
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem<Contact?>(
+                            value: null,
+                            child: Text('مشتری آزاد / عمومی'),
+                          ),
+                          for (final c in vm.allContacts.where((c) => c.type == 'CUSTOMER' || c.type == 'BOTH'))
+                            DropdownMenuItem<Contact?>(value: c, child: Text(c.name, overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: (c) => setDialogState(() => selectedCustomer = c),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          ChoiceChip(label: const Text('نقدی'), selected: paymentMethod == 'CASH', onSelected: (_) => setDialogState(() => paymentMethod = 'CASH')),
+                          ChoiceChip(label: const Text('کارتخوان'), selected: paymentMethod == 'CARD', onSelected: (_) => setDialogState(() => paymentMethod = 'CARD')),
+                          ChoiceChip(label: const Text('کارت به کارت'), selected: paymentMethod == 'TRANSFER', onSelected: (_) => setDialogState(() => paymentMethod = 'TRANSFER')),
+                          ChoiceChip(label: const Text('نسیه / دفتری'), selected: paymentMethod == 'CREDIT', onSelected: (_) => setDialogState(() { paymentMethod = 'CREDIT'; paid.text = '0'; })),
+                        ],
+                      ),
                       const SizedBox(height: 6),
                       Align(alignment: AlignmentDirectional.centerEnd, child: Text('قابل پرداخت: ${_formatMoney(payable, vm.config?.currency ?? 'تومان')}', style: const TextStyle(fontWeight: FontWeight.bold))),
                     ],
@@ -187,6 +226,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('این شماره فاکتور قبلاً استفاده شده است.'), backgroundColor: Colors.red));
                       return;
                     }
+                    if (paymentMethod == 'CREDIT' && selectedCustomer == null) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('برای ثبت نسیه باید مشتری یا طرف حساب انتخاب شود.'), backgroundColor: Colors.orange, duration: Duration(seconds: 3)));
+                      return;
+                    }
+                    if (paymentMethod == 'CREDIT' && (_parseNumber(paid.text) ?? 0) > 0) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('برای ثبت نسیه، مبلغ دریافتی باید صفر باشد.'), backgroundColor: Colors.orange, duration: Duration(seconds: 3)));
+                      return;
+                    }
                     setDialogState(() => isSaving = true);
                     try {
                       final total = subtotal();
@@ -197,8 +244,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                         items: List<TransactionItem>.from(draftItems),
                         paidAmount: p,
                         discount: d,
-                        paymentMethod: 'CASH',
-                        customer: vm.selectedCustomer,
+                        paymentMethod: paymentMethod,
+                        customer: selectedCustomer,
                         customDateMillis: dateTime.millisecondsSinceEpoch,
                         customInvoiceNumber: number.text.trim(),
                       );
@@ -831,6 +878,85 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     }
   }
 
+  // رسید هر فاکتور به‌صورت مستقل و با قالب مشترک رسید صندوق چاپ می‌شود.
+  Future<void> _printReceipt(
+    BuildContext context,
+    MainViewModel vm,
+    StoreTransaction transaction,
+  ) async {
+    if (_printingReceiptIds.contains(transaction.id)) return;
+
+    setState(() => _printingReceiptIds.add(transaction.id));
+    try {
+      final items = await vm.getTransactionItems(transaction.id);
+      final file = await Exporter.exportThermalReceiptPdf(
+        storeName: vm.config?.storeName ?? 'فروشگاه',
+        storePhone: vm.config?.storePhone ?? '',
+        businessTitle: vm.config?.businessTitle ?? 'فروشگاه',
+        logoBase64: vm.config?.logoBase64 ?? '',
+        transactionId: transaction.id,
+        invoiceNumber: transaction.invoiceNumber,
+        dateStr: _formatDate(transaction.dateMillis),
+        customerName: transaction.contactName.trim().isEmpty
+            ? (transaction.type.toUpperCase() == 'PURCHASE'
+                ? 'تأمین‌کننده عمومی'
+                : 'مشتری حضوری')
+            : transaction.contactName,
+        userName: transaction.userName.trim().isEmpty
+            ? (vm.currentUser?.name ?? 'فروشنده')
+            : transaction.userName,
+        items: items.map((item) => [
+          item.productName,
+          item.quantity,
+          item.unitPrice,
+        ]).toList(),
+        totalAmount: transaction.totalAmount,
+        discount: transaction.discount,
+        finalAmount: transaction.finalAmount,
+        paidAmount: transaction.paidAmount,
+        debtAmount: transaction.debtAmount,
+        currency: vm.config?.currency ?? 'تومان',
+        paymentMethod: transaction.paymentMethod,
+        invoiceType: transaction.type,
+        paperSize: (vm.config?.printPaperSize == 'R58' ||
+                vm.config?.printPaperSize == 'R80')
+            ? vm.config!.printPaperSize
+            : 'R80',
+        orientation: 'PORTRAIT',
+        marginMm: 3.0,
+        customWidthMm: vm.config?.customPaperWidthMm ?? 80.0,
+        customHeightMm: vm.config?.customPaperHeightMm ?? 220.0,
+      );
+
+      if (file == null) throw Exception('ساخت فایل PDF رسید انجام نشد.');
+      final label = transaction.invoiceNumber.trim().isEmpty
+          ? '#${transaction.id}'
+          : 'شماره ${transaction.invoiceNumber}';
+      final printed = await Exporter.printPdfFile(
+        file,
+        jobName: 'رسید_$label',
+      );
+      if (!mounted) return;
+      _showMessage(
+        context,
+        printed
+            ? 'رسید $label برای چاپ ارسال شد.'
+            : 'پنجره چاپ باز نشد؛ فایل رسید ذخیره شد.',
+        backgroundColor: printed ? null : Colors.orange,
+      );
+    } catch (error) {
+      if (mounted) {
+        _showMessage(
+          context,
+          'خطا در چاپ رسید: $error',
+          backgroundColor: Colors.red,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _printingReceiptIds.remove(transaction.id));
+    }
+  }
+
   Future<void> _exportInvoiceExcel(
     BuildContext context,
     MainViewModel vm,
@@ -1242,11 +1368,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                           isPurchase: isPurchase,
                           isPrinting:
                               _printingInvoiceIds.contains(transaction.id),
+                          isPrintingReceipt:
+                              _printingReceiptIds.contains(transaction.id),
                           isSending:
                               _sendingInvoiceIds.contains(transaction.id),
                           isMutating:
                               _mutatingInvoiceIds.contains(transaction.id),
                           onPrint: () => _printInvoice(
+                            context,
+                            vm,
+                            transaction,
+                          ),
+                          onPrintReceipt: () => _printReceipt(
                             context,
                             vm,
                             transaction,
@@ -1456,6 +1589,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         SnackBar(
           content: Text(message),
           backgroundColor: backgroundColor,
+          duration: const Duration(seconds: 3),
         ),
       );
   }
@@ -1574,9 +1708,11 @@ class _InvoiceCard extends StatelessWidget {
   final String currency;
   final bool isPurchase;
   final bool isPrinting;
+  final bool isPrintingReceipt;
   final bool isSending;
   final bool isMutating;
   final VoidCallback onPrint;
+  final VoidCallback onPrintReceipt;
   final VoidCallback onExportExcel;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -1587,9 +1723,11 @@ class _InvoiceCard extends StatelessWidget {
     required this.currency,
     required this.isPurchase,
     required this.isPrinting,
+    required this.isPrintingReceipt,
     required this.isSending,
     required this.isMutating,
     required this.onPrint,
+    required this.onPrintReceipt,
     required this.onExportExcel,
     required this.onEdit,
     required this.onDelete,
@@ -1723,29 +1861,30 @@ class _InvoiceCard extends StatelessWidget {
                 ],
               ),
             ],
-            const Divider(height: 22),
-            Row(
-              children: [
-                if (transaction.userName.trim().isNotEmpty) ...[
-                  const Icon(
-                    Icons.person_outline,
-                    size: 16,
-                    color: Colors.grey,
-                  ),
+            if (transaction.userName.trim().isNotEmpty) ...[
+              Row(
+                children: [
+                  const Icon(Icons.person_outline, size: 16, color: Colors.grey),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       'ثبت توسط: ${transaction.userName}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 11,
-                      ),
+                      style: const TextStyle(color: Colors.grey, fontSize: 11),
                     ),
                   ),
-                ] else
-                  const Spacer(),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+            const Divider(height: 18),
+            Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 2,
+              runSpacing: 0,
+              children: [
                 if (onEdit != null)
                   IconButton(
                     tooltip: 'ویرایش فاکتور',
@@ -1765,11 +1904,20 @@ class _InvoiceCard extends StatelessWidget {
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.print_outlined),
+                ),
+                IconButton(
+                  tooltip: 'چاپ رسید مستقل',
+                  onPressed: isPrintingReceipt ? null : onPrintReceipt,
+                  icon: isPrintingReceipt
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.receipt_long_outlined),
                 ),
                 IconButton(
                   tooltip: 'خروجی Excel فاکتور',
@@ -1784,9 +1932,7 @@ class _InvoiceCard extends StatelessWidget {
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.send_outlined),
                   ),
