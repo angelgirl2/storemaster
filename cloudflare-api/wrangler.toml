@@ -1,0 +1,23 @@
+name = "storemaster-api"
+main = "src/index.js"
+compatibility_date = "2026-10-26"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[vars]
+APP_NAME = "StoreMaster API"
+TRIAL_DAYS = "15"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "storemaster-prod"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "storemaster-files"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
