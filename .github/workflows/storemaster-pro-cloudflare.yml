@@ -1,0 +1,99 @@
+name: Store Master Pro - Cloudflare Infrastructure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: storemaster-pro-cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  test-and-deploy:
+    name: Validate and deploy Store Master Pro Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Store Master Pro repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Validate dedicated Worker entry point
+        run: node --check cloudflare-storemaster-pro/src/index.js
+
+      - name: Test Store Master failover implementation
+        run: npm --prefix cloudflare test
+
+      - name: Validate origins and required credentials
+        env:
+          PRIMARY_API_ORIGIN: ${{ vars.PRIMARY_API_ORIGIN }}
+          FALLBACK_API_ORIGIN: ${{ vars.FALLBACK_API_ORIGIN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FAILOVER_CONTROL_KEY: ${{ secrets.FAILOVER_CONTROL_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PRIMARY_API_ORIGIN" || { echo "Missing repository variable PRIMARY_API_ORIGIN"; exit 1; }
+          test -n "$FALLBACK_API_ORIGIN" || { echo "Missing repository variable FALLBACK_API_ORIGIN"; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing repository secret CLOUDFLARE_API_TOKEN"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing repository secret CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          test "${#FAILOVER_CONTROL_KEY}" -ge 32 || { echo "FAILOVER_CONTROL_KEY must contain at least 32 characters"; exit 1; }
+          node --input-type=module <<'NODE'
+          for (const name of ['PRIMARY_API_ORIGIN', 'FALLBACK_API_ORIGIN']) {
+            const raw = process.env[name];
+            const url = new URL(raw);
+            if (url.protocol !== 'https:' || url.pathname !== '/' || url.search || url.hash || url.username || url.password) {
+              throw new Error(name + ' must be a plain HTTPS origin URL without a path or credentials');
+            }
+          }
+          if (process.env.PRIMARY_API_ORIGIN === process.env.FALLBACK_API_ORIGIN) {
+            throw new Error('PRIMARY_API_ORIGIN and FALLBACK_API_ORIGIN must be different');
+          }
+          NODE
+
+      - name: Automatically create or reuse Store Master Pro R2 backup bucket
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUCKET="${R2_BUCKET:-storemaster-pro-backups}"
+          API="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets"
+          LIST="$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            "$API")"
+          echo "$LIST" | jq -e '.success == true' >/dev/null || { echo "Cloudflare API could not list R2 buckets; check token permissions"; exit 1; }
+          if echo "$LIST" | jq -e --arg name "$BUCKET" '([.result.buckets[]? | select(.name == $name)] | length) > 0' >/dev/null; then
+            echo "R2 bucket already exists: $BUCKET"
+          else
+            echo "Creating R2 bucket: $BUCKET"
+            CREATED="$(curl --fail-with-body --silent --show-error --request POST "$API" \
+              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "$(jq -nc --arg name "$BUCKET" '{name:$name}')")"
+            echo "$CREATED" | jq -e '.success == true' >/dev/null || { echo "Cloudflare failed to create R2 bucket"; exit 1; }
+            echo "R2 bucket created: $BUCKET"
+          fi
+
+      - name: Deploy Store Master Pro Worker and Durable Object
+        uses: cloudflare/wrangler-action@v4
+        env:
+          FAILOVER_CONTROL_KEY: ${{ secrets.FAILOVER_CONTROL_KEY }}
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config cloudflare-storemaster-pro/wrangler.toml --var PRIMARY_API_ORIGIN:${{ vars.PRIMARY_API_ORIGIN }} --var FALLBACK_API_ORIGIN:${{ vars.FALLBACK_API_ORIGIN }}
+          secrets: |
+            FAILOVER_CONTROL_KEY

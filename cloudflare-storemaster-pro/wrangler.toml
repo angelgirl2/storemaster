@@ -1,0 +1,18 @@
+name = "storemaster-pro-api-failover"
+main = "src/index.js"
+compatibility_date = "2026-10-26"
+workers_dev = true
+
+# A separate Durable Object namespace is created for this Store Master Pro Worker.
+[[durable_objects.bindings]]
+name = "FAILOVER_STATE"
+class_name = "FailoverState"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FailoverState"]
+
+# The deployment workflow supplies these values from GitHub Actions Variables:
+# PRIMARY_API_ORIGIN = direct Railway API origin (HTTPS, no path)
+# FALLBACK_API_ORIGIN = direct VPS API origin (HTTPS, no path)
+# FAILOVER_CONTROL_KEY is deployed as a Worker secret, not a plain variable.
