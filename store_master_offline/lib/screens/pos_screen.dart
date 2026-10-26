@@ -569,7 +569,7 @@ class _CardGrid extends StatelessWidget {
                     ),
                   const Spacer(),
                   Text(
-                    '${NumberFormat('#,##0', 'en_US').format(product.sellPrice)} $currency',
+                    '${NumberFormat('#,##0', 'fa_IR').format(product.sellPrice)} $currency',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).colorScheme.primary,
@@ -638,7 +638,7 @@ class _TouchTileGrid extends StatelessWidget {
                 Text(
                   isOutOfStock
                       ? 'ناموجود'
-                      : '${NumberFormat('#,##0', 'en_US').format(product.sellPrice)} $currency',
+                      : '${NumberFormat('#,##0', 'fa_IR').format(product.sellPrice)} $currency',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: isOutOfStock
@@ -691,7 +691,7 @@ class _ListGrid extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '${NumberFormat('#,##0', 'en_US').format(product.sellPrice)} $currency',
+                  '${NumberFormat('#,##0', 'fa_IR').format(product.sellPrice)} $currency',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 IconButton(
@@ -816,7 +816,7 @@ class _CartPanel extends StatelessWidget {
                                       ),
                                     ),
                                     Text(
-                                      '${NumberFormat('#,##0', 'en_US').format(cartItem.unitPrice)} $currency',
+                                      '${NumberFormat('#,##0', 'fa_IR').format(cartItem.unitPrice)} $currency',
                                       style: const TextStyle(
                                         fontSize: 11,
                                         color: Colors.grey,
@@ -934,7 +934,7 @@ class _TotalRow extends StatelessWidget {
           Text(title, style: style),
           const Spacer(),
           Text(
-            '$prefix${NumberFormat('#,##0', 'en_US').format(value)} $currency',
+            '$prefix${NumberFormat('#,##0', 'fa_IR').format(value)} $currency',
             style: style,
           ),
         ],
@@ -1020,7 +1020,7 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
   }
 
   String _money(double value) {
-    return NumberFormat('#,##0', 'en_US').format(value);
+    return NumberFormat('#,##0', 'fa_IR').format(value);
   }
 
   Future<void> _submit() async {

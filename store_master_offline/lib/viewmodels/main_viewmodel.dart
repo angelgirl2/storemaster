@@ -1488,6 +1488,12 @@ class MainViewModel extends ChangeNotifier {
         transaction,
         transactionItems,
       );
+      unawaited(OnlineApiService.instance.publishEvent(
+        eventType: 'sale_created',
+        title: 'فروش جدید ثبت شد',
+        message: 'فاکتور فروش #$transactionId ثبت شد.',
+        entityId: '$transactionId',
+      ));
 
       final commission =
           finalAmount * (user.commissionPercent.clamp(0.0, 100.0) / 100.0);
@@ -1572,6 +1578,12 @@ class MainViewModel extends ChangeNotifier {
     );
 
     final transactionId = await _repo.recordSale(transaction, items);
+    unawaited(OnlineApiService.instance.publishEvent(
+      eventType: 'sale_created',
+      title: 'فروش جدید ثبت شد',
+      message: 'فاکتور فروش #$transactionId ثبت شد.',
+      entityId: '$transactionId',
+    ));
     _userMessage = 'فاکتور دلخواه #$transactionId با موفقیت ثبت شد';
     await loadAll();
     await _saveReceiptPdfForTransaction(transactionId);
@@ -2639,7 +2651,7 @@ class MainViewModel extends ChangeNotifier {
         contact.phone.isEmpty ? '-' : contact.phone,
         contact.address.isEmpty ? '-' : contact.address,
         contact.note.isEmpty ? '-' : contact.note,
-        '${NumberFormat('#,##0', 'en_US').format(contact.totalDebt)} $currency',
+        '${NumberFormat('#,##0', 'fa_IR').format(contact.totalDebt)} $currency',
       ];
     }).toList();
 
@@ -2656,7 +2668,7 @@ class MainViewModel extends ChangeNotifier {
       ],
       rows: rows,
       subtitle:
-          'مجموع مطالبات: ${NumberFormat('#,##0', 'en_US').format(totalDebt)} $currency',
+          'مجموع مطالبات: ${NumberFormat('#,##0', 'fa_IR').format(totalDebt)} $currency',
       paperSize: _config?.printPaperSize ?? 'A4',
       orientation: _config?.printOrientation ?? 'PORTRAIT',
       marginMm: _config?.printMarginMm ?? 8.0,

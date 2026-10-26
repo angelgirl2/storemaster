@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._();
 
   Database? _db;
-  static const int _version = 25;
+  static const int _version = 26;
   static const String _dbName = 'storemaster_database.db';
 
   Future<String> get databasePath async => await _resolvePath();
@@ -372,7 +372,9 @@ class DatabaseHelper {
           versionParts.add('COALESCE(NEW."$candidate", 0)');
         }
       }
-      final ver = 'MAX(${versionParts.join(',')})';
+      final ver = versionParts.length == 1
+          ? versionParts.single
+          : 'MAX(${versionParts.join(',')})';
       final jnew = names.map((n) => "'$n', NEW.\"$n\"").join(',');
       final settingGuard = table == 'app_settings'
           ? " AND COALESCE(NEW.key, '') NOT IN ('local_sync_device_id','license_payload','license_signature','license_last_clock','license_expired_latched','local_trial_payload')"

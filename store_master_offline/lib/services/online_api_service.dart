@@ -12,10 +12,12 @@
 
 // ignore_for_file: unused_field
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
+import '../database/database_helper.dart';
 import '../shared_src/online_models.dart';
 
 import 'online_config.dart';
@@ -158,74 +160,56 @@ class OnlineApiService {
     //   );
     // }
 
-    if (config.baseUrl.contains('YOUR-DOMAIN')) {
-      throw const SocketException(
-        'آدرس API تنظیم نشده است.',
-      );
+    final bases = config.apiBaseUrls;
+    if (bases.isEmpty) {
+      throw const SocketException('آدرس API تنظیم نشده است.');
     }
-
-    final apiBase = config.baseUrl.replaceFirst(RegExp(r'/$'), '') + '/api/v1';
     final normalizedPath = path.replaceFirst(RegExp(r'^/+'), '');
-    final uri = Uri.parse('$apiBase/$normalizedPath');
+    Object? lastError;
 
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 10);
+    for (var i = 0; i < bases.length; i++) {
+      final apiBase = bases[i];
+      final uri = Uri.parse('$apiBase/api/v1/$normalizedPath');
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+      try {
+        final request = await client.openUrl(method, uri).timeout(const Duration(seconds: 10));
+        request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+        request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+        headers?.forEach((name, value) {
+          if (name.trim().isNotEmpty && value.trim().isNotEmpty) request.headers.set(name, value);
+        });
+        if (auth && _token != null) request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
+        if (body != null) request.write(jsonEncode(body));
 
-    try {
-      final request = await client.openUrl(
-        method,
-        uri,
-      );
-
-      request.headers.set(
-        HttpHeaders.acceptHeader,
-        'application/json',
-      );
-
-      request.headers.set(
-        HttpHeaders.contentTypeHeader,
-        'application/json',
-      );
-      headers?.forEach((name, value) {
-        if (name.trim().isNotEmpty && value.trim().isNotEmpty) {
-          request.headers.set(name, value);
+        final response = await request.close().timeout(const Duration(seconds: 12));
+        final responseText = await utf8.decoder.bind(response).join().timeout(const Duration(seconds: 12));
+        final safeMethod = method == 'GET' || method == 'HEAD';
+        final gatewayFailure = safeMethod && i + 1 < bases.length &&
+            const {502, 503, 504, 520, 521, 522, 523, 524, 530}.contains(response.statusCode);
+        if (gatewayFailure) {
+          // A proxy/suspended-host error may return HTML rather than JSON.
+          // Fall through before decoding the body so the backup can still be tried.
+          lastError = ApiException(response.statusCode, 'سرور اصلی در دسترس نیست');
+          continue;
         }
-      });
-
-      if (auth && _token != null) {
-        request.headers.set(
-          HttpHeaders.authorizationHeader,
-          'Bearer $_token',
-        );
+        final decoded = responseText.trim().isEmpty ? <String, dynamic>{} : jsonDecode(responseText);
+        if (decoded is! Map) throw const FormatException('پاسخ سرور باید یک شیء JSON باشد.');
+        final data = Map<String, dynamic>.from(decoded);
+        if (response.statusCode >= 200 && response.statusCode < 300) return data;
+        throw ApiException(response.statusCode, '${data['message'] ?? 'خطای سرور'}');
+      } catch (error) {
+        lastError = error;
+        final safeMethod = method == 'GET' || method == 'HEAD';
+        final retryableNetworkFailure = error is SocketException ||
+            error is HttpException || error is TimeoutException;
+        if (safeMethod && i + 1 < bases.length && retryableNetworkFailure) continue;
+        rethrow;
+      } finally {
+        client.close(force: true);
       }
-
-      if (body != null) {
-        request.write(
-          jsonEncode(body),
-        );
-      }
-
-      final response = await request.close();
-
-      final text = await utf8.decoder.bind(response).join();
-
-      final decoded = text.trim().isEmpty ? <String, dynamic>{} : jsonDecode(text);
-      if (decoded is! Map) {
-        throw const FormatException('پاسخ سرور باید یک شیء JSON باشد.');
-      }
-      final data = Map<String, dynamic>.from(decoded);
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw ApiException(
-          response.statusCode,
-          '${data['message'] ?? 'خطای سرور'}',
-        );
-      }
-
-      return data;
-    } finally {
-      client.close(force: true);
     }
+    if (lastError is Exception) throw lastError;
+    throw const SocketException('سرور اصلی و سرور جایگزین در دسترس نیستند.');
   }
 
 
@@ -610,6 +594,92 @@ class OnlineApiService {
       'totalAmount': totalAmount, 'discount': discount,
       'finalAmount': finalAmount, 'paidAmount': paidAmount, 'debtAmount': debtAmount,
     });
+  }
+
+
+  /// Fetches public license pricing without requiring a logged-in session.
+  /// Returns an empty map when offline so the local-first workflow is preserved.
+  Future<Map<String, dynamic>> fetchPublicPricing() async {
+    if (!onlineEnabled) return <String, dynamic>{};
+    try {
+      return await _request('GET', '/public/pricing', auth: false);
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+  }
+
+  /// Notifications are persisted by the server. Errors are swallowed so the
+  /// local-first sales workflow remains functional when no network is available.
+  Future<List<Map<String, dynamic>>> fetchNotifications({int afterId = 0}) async {
+    if (!onlineEnabled || !isAuthenticated) return <Map<String, dynamic>>[];
+    try {
+      final data = await _request('GET', '/notifications?afterId=$afterId&take=50');
+      return List<Map<String, dynamic>>.from((data['items'] as List?) ?? const []);
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  Future<int> unreadNotificationCount() async {
+    if (!onlineEnabled || !isAuthenticated) return 0;
+    try {
+      final data = await _request('GET', '/notifications/unread-count');
+      return (data['count'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> markNotificationRead(int id) async {
+    if (!onlineEnabled || !isAuthenticated || id <= 0) return;
+    try { await _request('POST', '/notifications/$id/read'); } catch (_) {}
+  }
+
+  Future<void> publishEvent({
+    required String eventType,
+    required String title,
+    required String message,
+    String? entityId,
+    String? platform,
+  }) async {
+    final eventId = '${DateTime.now().microsecondsSinceEpoch}-${entityId ?? 'event'}';
+    final payload = <String, dynamic>{
+      'eventId': eventId,
+      'eventType': eventType,
+      'title': title,
+      'message': message,
+      'entityId': entityId,
+      'platform': platform,
+    };
+    if (onlineEnabled && isAuthenticated) {
+      try {
+        await _request('POST', '/notifications/events', body: payload);
+        return;
+      } catch (_) {
+        // Fall through to the local outbox. It will retry after connectivity/session returns.
+      }
+    }
+    await _queueNotificationEvent(payload, eventId);
+  }
+
+  Future<void> _queueNotificationEvent(
+    Map<String, dynamic> payload,
+    String eventId,
+  ) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.insert('sync_outbox', {
+        'entity': 'notification_events',
+        'operation': 'UPSERT',
+        'entityId': eventId,
+        'payloadJson': jsonEncode(payload),
+        'sourceVersion': now,
+        'createdAt': now,
+      });
+    } catch (_) {
+      // Queue failure is best-effort; local sales and printing must never fail because of notifications.
+    }
   }
 
   // ============================================================

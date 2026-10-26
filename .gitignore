@@ -54,3 +54,9 @@ core.*
 *.dll
 *.pdb
 *.zip
+
+*.dump
+ops/backups/
+cloudflare/.wrangler/
+cloudflare/.dev.vars
+ops/backups/*.log

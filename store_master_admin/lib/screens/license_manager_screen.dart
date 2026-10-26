@@ -21,7 +21,6 @@ import '../services/license_signer.dart';
 import '../services/online_admin_service.dart';
 import 'stores_screen.dart';
 import 'support_inbox_screen.dart';
-import 'dart:typed_data';
 
 class LicenseManagerScreen extends StatefulWidget {
   const LicenseManagerScreen({super.key});
@@ -439,7 +438,7 @@ class _LicenseManagerScreenState extends State<LicenseManagerScreen> {
                   _ => '$days روز',
                 }} • ${NumberFormat(
                   '#,##0',
-                  'en_US',
+                  'fa_IR',
                 ).format(
                   _prices[days] ?? 0,
                 )} $_currency',
@@ -751,7 +750,7 @@ class _LicenseManagerScreenState extends State<LicenseManagerScreen> {
                         item['platform']?.toString() ?? '',
                         '${NumberFormat(
                           '#,##0',
-                          'en_US',
+                          'fa_IR',
                         ).format(
                           price,
                         )} '
@@ -2481,14 +2480,15 @@ class _LicenseManagerScreenState extends State<LicenseManagerScreen> {
                   ),
                 FilledButton.icon(
                   onPressed: () async {
-                    await LicenseRepository.instance.setPrices(
-                      _prices,
-                    );
+                    await LicenseRepository.instance.setPrices(_prices);
+                    if (OnlineAdminService.onlineEnabled) {
+                      await OnlineAdminService.instance.savePricing(_prices);
+                    }
                     await _load();
                     if (mounted) {
-                      _msg(
-                        'قیمت‌های جدید ذخیره شدند.',
-                      );
+                      _msg(OnlineAdminService.onlineEnabled
+                          ? 'قیمت‌ها در دستگاه و سرور ذخیره شدند؛ کاربران آنلاین حداکثر تا ۱۰ ثانیه دیگر تغییر را می‌بینند.'
+                          : 'قیمت‌های محلی ذخیره شدند. برای انتشار زنده، نسخه ادمین را با STORE_MASTER_ADMIN_ONLINE_ENABLED=true بسازید.');
                     }
                   },
                   icon: const Icon(
@@ -2797,13 +2797,13 @@ class _LicenseManagerScreenState extends State<LicenseManagerScreen> {
                         const TextSpan(text: 'قیمت اصلی: '),
                         TextSpan(
                           text:
-                              '${NumberFormat('#,##0', 'en_US').format(_quotedOriginalPrice)} $_currency',
+                              '${NumberFormat('#,##0', 'fa_IR').format(_quotedOriginalPrice)} $_currency',
                           style: const TextStyle(
                               decoration: TextDecoration.lineThrough),
                         ),
                         TextSpan(
                           text:
-                              '   قیمت تخفیفی: ${NumberFormat('#,##0', 'en_US').format(_quotedFinalPrice)} $_currency',
+                              '   قیمت تخفیفی: ${NumberFormat('#,##0', 'fa_IR').format(_quotedFinalPrice)} $_currency',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         if (_discountPercent > 0)
@@ -3071,19 +3071,19 @@ class _LicenseManagerScreenState extends State<LicenseManagerScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '${NumberFormat('#,##0', 'en_US').format(original)} $_currency',
+                  '${NumberFormat('#,##0', 'fa_IR').format(original)} $_currency',
                   style:
                       const TextStyle(decoration: TextDecoration.lineThrough),
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  '${NumberFormat('#,##0', 'en_US').format(discounted)} $_currency',
+                  '${NumberFormat('#,##0', 'fa_IR').format(discounted)} $_currency',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
             )
           : Text(
-              '$label • ${NumberFormat('#,##0', 'en_US').format(original)} $_currency',
+              '$label • ${NumberFormat('#,##0', 'fa_IR').format(original)} $_currency',
             ),
       selected: duration == value,
       onSelected: _busy
@@ -3408,7 +3408,7 @@ class _LicenseManagerScreenState extends State<LicenseManagerScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '${NumberFormat('#,##0', 'en_US').format(price)} $currency',
+                      '${NumberFormat('#,##0', 'fa_IR').format(price)} $currency',
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         color: theme.colorScheme.primary,

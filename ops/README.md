@@ -67,3 +67,10 @@ flutter run --dart-define=STORE_MASTER_ONLINE_ENABLED=true --dart-define=STORE_M
 - قبل از هر deploy از PostgreSQL backup بگیر.
 - image ها را در production با نسخه pin شده نگه دار؛ `latest` استفاده نکن.
 - database init فقط برای ساخت اولیه است؛ تغییر schemaهای بعدی باید با migration کنترل‌شده انجام شود.
+
+
+## Cloudflare failover و پشتیبان PostgreSQL
+
+- راهنمای Worker و R2 در `cloudflare/DEPLOY_FA.md` است. مبدا اصلی باید Railway و مبدا جایگزین VPS باشد؛ هر دو باید پاسخ `/health/ready` بدهند. دامنهٔ API را به Worker متصل کن و URL اصلی Flutter را به همان دامنه بده.
+- وقتی Cloudflare Worker failover را مدیریت می‌کند، `STORE_MASTER_API_URL` باید URL Worker باشد و `STORE_MASTER_API_FALLBACK_URL` را خالی بگذار تا کلاینت مسیر failover پایدار را دور نزند. fallback کلاینت فقط برای پیکربندی‌های جداگانه است؛ هرگز درخواست نوشتنی مبهم را مستقیماً دوباره ارسال نکن.
+- بکاپ R2: در `ops/.env` کلیدهای PostgreSQL و R2 را قرار بده، سپس `bash scripts/install-r2-backup-cron.sh` را اجرا کن. این بکاپ دیتابیس VPS را ذخیره می‌کند؛ آن را تکثیر زندهٔ دیتابیس Railway تلقی نکن.

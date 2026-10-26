@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../utils/shamsi_date_utils.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -636,7 +637,7 @@ class _LicenseActivationScreenState extends State<LicenseActivationScreen> {
                                   [
                                     if (store.storeCode.trim().isNotEmpty) 'کد: ${store.storeCode}',
                                     'حداکثر دستگاه: ${store.maxDevices}',
-                                    if (store.expiresAt > 0) 'تا ${DateFormat('yyyy/MM/dd').format(DateTime.fromMillisecondsSinceEpoch(store.expiresAt))}',
+                                    if (store.expiresAt > 0) 'تا ${ShamsiDateUtils.date(DateTime.fromMillisecondsSinceEpoch(store.expiresAt))}',
                                   ].join(' • '),
                                 ),
                                 trailing: const Icon(Icons.chevron_left_rounded),
@@ -679,7 +680,7 @@ class _LicenseActivationScreenState extends State<LicenseActivationScreen> {
                                   _ => 'پلن',
                                 }}: ${NumberFormat(
                                   '#,##0',
-                                  'en_US',
+                                  'fa_IR',
                                 ).format(_prices[days] ?? 0)} تومان',
                               ),
                             const SizedBox(height: 8),

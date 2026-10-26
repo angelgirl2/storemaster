@@ -1,3 +1,4 @@
+import 'dart:async';
 // invoices_screen_fixed.dart
 // نسخه اصلاح‌شده مدیریت فاکتورها
 
@@ -847,6 +848,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         file,
         jobName: 'فاکتور_${transaction.invoiceNumber.isEmpty ? transaction.id : transaction.invoiceNumber}',
       );
+      if (printed) {
+        unawaited(OnlineApiService.instance.publishEvent(
+          eventType: 'invoice_printed',
+          title: 'فاکتور چاپ شد',
+          message: 'فاکتور ${transaction.invoiceNumber.isEmpty ? '#${transaction.id}' : 'شماره ${transaction.invoiceNumber}'} برای چاپ ارسال شد.',
+          entityId: '${transaction.id}',
+        ));
+      }
 
       if (!mounted) {
         return;
@@ -936,12 +945,20 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         file,
         jobName: 'رسید_$label',
       );
+      if (printed) {
+        unawaited(OnlineApiService.instance.publishEvent(
+          eventType: 'receipt_printed',
+          title: 'رسید چاپ شد',
+          message: 'رسید $label توسط ${vm.currentUser?.name ?? 'کاربر'} برای چاپ ارسال شد.',
+          entityId: '${transaction.id}',
+        ));
+      }
       if (!mounted) return;
       _showMessage(
         context,
         printed
             ? 'رسید $label برای چاپ ارسال شد.'
-            : 'پنجره چاپ باز نشد؛ فایل رسید ذخیره شد.',
+            : 'پنجره چاپ باز نشد؛ فایل رسید ذخیره شد.', 
         backgroundColor: printed ? null : Colors.orange,
       );
     } catch (error) {
@@ -1475,7 +1492,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 
   static String _formatMoney(num value, String currency) {
-    final formatted = NumberFormat('#,##0', 'en_US').format(value);
+    final formatted = NumberFormat('#,##0', 'fa_IR').format(value);
 
     return currency.trim().isEmpty ? formatted : '$formatted $currency';
   }
@@ -1485,7 +1502,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       return value.toStringAsFixed(0);
     }
 
-    return NumberFormat('#,##0.##', 'en_US').format(value);
+    return NumberFormat('#,##0.##', 'fa_IR').format(value);
   }
 
   static String _formatDate(int dateMillis) {
@@ -1951,7 +1968,7 @@ class _InvoiceCard extends StatelessWidget {
   }
 
   static String _formatMoney(num value, String currency) {
-    final formatted = NumberFormat('#,##0', 'en_US').format(value);
+    final formatted = NumberFormat('#,##0', 'fa_IR').format(value);
 
     return currency.trim().isEmpty ? formatted : '$formatted $currency';
   }

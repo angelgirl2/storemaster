@@ -1098,7 +1098,7 @@ class _LicenseManagerScreenState extends State<LicenseManagerScreen> {
 
   Widget _durationChip(int value, String label) => ChoiceChip(
       label: Text(
-          '$label • ${NumberFormat('#,##0', 'en_US').format(_prices[value] ?? 0)} $_currency'),
+          '$label • ${NumberFormat('#,##0', 'fa_IR').format(_prices[value] ?? 0)} $_currency'),
       selected: duration == value,
       onSelected: _busy ? null : (_) => setState(() => duration = value));
 
@@ -1197,7 +1197,7 @@ class _LicenseManagerScreenState extends State<LicenseManagerScreen> {
                 style: TextStyle(
                     fontWeight: FontWeight.w900,
                     color: theme.colorScheme.primary)),
-            Text('${NumberFormat('#,##0', 'en_US').format(price)} $currency',
+            Text('${NumberFormat('#,##0', 'fa_IR').format(price)} $currency',
                 style: TextStyle(
                     fontSize: 10, color: theme.colorScheme.onSurfaceVariant))
           ])

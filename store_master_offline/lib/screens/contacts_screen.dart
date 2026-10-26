@@ -295,7 +295,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                               style: const TextStyle(
                                   fontSize: 12, color: Color(0xFFAD1457))),
                           Text(
-                            NumberFormat('#,##0', 'en_US').format(
+                            NumberFormat('#,##0', 'fa_IR').format(
                                     debtors.fold<double>(
                                         0, (s, c) => s + c.totalDebt)) +
                                 ' $currency',
@@ -325,7 +325,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                               style: const TextStyle(
                                   fontSize: 12, color: Color(0xFF8C5A8B))),
                           Text(
-                            NumberFormat('#,##0', 'en_US').format(
+                            NumberFormat('#,##0', 'fa_IR').format(
                                     creditors.fold<double>(
                                         0, (s, c) => s + c.totalPayable)) +
                                 ' $currency',
@@ -454,7 +454,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                                   children: [
                                     if (c.totalDebt > 0)
                                       Text(
-                                        'مبلغ بدهکار/طلب: ${NumberFormat('#,##0', 'en_US').format(c.totalDebt)} $currency',
+                                        'مبلغ بدهکار/طلب: ${NumberFormat('#,##0', 'fa_IR').format(c.totalDebt)} $currency',
                                         style: const TextStyle(
                                             color: Color(0xFFC2185B),
                                             fontWeight: FontWeight.bold),

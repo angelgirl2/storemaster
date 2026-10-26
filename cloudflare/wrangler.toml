@@ -1,0 +1,18 @@
+name = "storemaster-api-failover"
+main = "src/index.js"
+compatibility_date = "2026-10-26"
+workers_dev = true
+
+# This Durable Object stores the active API mode persistently across requests.
+[[durable_objects.bindings]]
+name = "FAILOVER_STATE"
+class_name = "FailoverState"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FailoverState"]
+
+# Set these as Worker variables/secrets in Cloudflare Dashboard or via Wrangler:
+# PRIMARY_API_ORIGIN = direct Railway API origin (without /api/v1)
+# FALLBACK_API_ORIGIN = direct VPS API origin (must not loop back to this Worker)
+# FAILOVER_CONTROL_KEY = secret, at least 32 characters; set with `wrangler secret put`

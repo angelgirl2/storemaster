@@ -746,5 +746,5 @@ class _CommercialFeaturesScreenState extends State<CommercialFeaturesScreen> {
 
   String _date(int millis) => faDateMillis(millis);
   String _money(num value, String currency) =>
-      '${NumberFormat('#,##0', 'en_US').format(value)} $currency';
+      '${NumberFormat('#,##0', 'fa_IR').format(value)} $currency';
 }

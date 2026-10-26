@@ -744,13 +744,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   _formatDate(expense.dateMillis),
                   expense.category,
                   expense.title,
-                  '${NumberFormat('#,##0', 'en_US').format(expense.amount)} $currency',
+                  '${NumberFormat('#,##0', 'fa_IR').format(expense.amount)} $currency',
                   expense.note,
                   expense.userName,
                 ])
             .toList(),
         subtitle:
-            'مجموع هزینه: ${NumberFormat('#,##0', 'en_US').format(total)} $currency',
+            'مجموع هزینه: ${NumberFormat('#,##0', 'fa_IR').format(total)} $currency',
       );
       if (file == null) throw Exception('ساخت PDF انجام نشد.');
 
@@ -796,7 +796,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   String _formatMoney(num value, String currency) {
     final formatted = NumberFormat(
       '#,##0',
-      'en_US',
+      'fa_IR',
     ).format(value);
 
     return '$formatted $currency';
@@ -898,7 +898,7 @@ class _ExpenseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final formattedAmount = NumberFormat(
       '#,##0',
-      'en_US',
+      'fa_IR',
     ).format(expense.amount);
 
     final formattedDate = faDateTimeMillis(expense.dateMillis);

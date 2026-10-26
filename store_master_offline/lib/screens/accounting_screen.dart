@@ -102,7 +102,7 @@ class _AccountingScreenState extends State<AccountingScreen> {
       double.tryParse(c.text.replaceAll(',', '').trim()) ?? 0;
 
   String _money(num value, MainViewModel vm) =>
-      '${NumberFormat('#,##0', 'en_US').format(value)} ${vm.config?.currency ?? 'تومان'}';
+      '${NumberFormat('#,##0', 'fa_IR').format(value)} ${vm.config?.currency ?? 'تومان'}';
 
   static const List<String> _persianMonthNames = <String>[
     'فروردین',

@@ -50,6 +50,7 @@ builder.Services.AddDbContext<StoreMasterDbContext>(options =>
 
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<PermissionService>();
+builder.Services.AddHostedService<LicenseExpirationNotifierService>();
 
 var key = builder.Configuration["Jwt:Key"];
 var issuer = builder.Configuration["Jwt:Issuer"] ?? "StoreMaster";
@@ -132,6 +133,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<StoreMasterDbContext>();
     await EnsureRuntimeSchemaAsync(db);
+    await AppNotificationStore.EnsureSchemaAsync(db);
 }
 
 static async Task EnsureRuntimeSchemaAsync(StoreMasterDbContext db)

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StoreMaster.Server.Data;
 using StoreMaster.Server.Models;
+using StoreMaster.Server.Services;
 using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
@@ -527,8 +528,15 @@ public class AdminController : ControllerBase
         var status = (x.Status ?? string.Empty).Trim().ToUpperInvariant();
         if (status is not ("ACTIVE" or "SUSPENDED" or "CANCELLED" or "RENEWED" or "EXPIRED"))
             return BadRequest(new { message = "وضعیت لایسنس نامعتبر است." });
+        var oldStatus = l.Status;
         l.Status = status;
         await db.SaveChangesAsync();
+        if (!string.Equals(oldStatus, status, StringComparison.OrdinalIgnoreCase))
+        {
+            await AppNotificationStore.PublishAsync(db, l.StoreId, "license_status_changed", "وضعیت لایسنس تغییر کرد",
+                $"وضعیت لایسنس {l.LicenseId} به {status} تغییر کرد.", "{}",
+                $"license-status:{l.LicenseId}:{status}:{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
+        }
 
         return Ok(new { success = true, licenseId = l.LicenseId, status = l.Status });
     }
@@ -666,6 +674,9 @@ public class AdminController : ControllerBase
         }
 
         await db.SaveChangesAsync();
+        await AppNotificationStore.PublishAsync(db, null, "pricing_changed", "قیمت لایسنس‌ها به‌روزرسانی شد",
+            "مدیریت قیمت بسته‌های لایسنس را تغییر داده است. برای مشاهده قیمت‌های جدید، صفحه را تازه‌سازی کنید.",
+            System.Text.Json.JsonSerializer.Serialize(new { prices = incoming, currency = x.Currency ?? "تومان" }));
 
         return Ok(new
         {

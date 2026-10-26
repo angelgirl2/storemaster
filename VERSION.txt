@@ -1,2 +1,3 @@
 Store Master Online/Offline Cross Platform
-2026-08-21
+2026-10-26
+Cloudflare Failover + Persistent Notifications

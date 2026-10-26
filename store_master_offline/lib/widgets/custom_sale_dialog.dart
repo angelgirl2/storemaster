@@ -175,7 +175,7 @@ class _CustomSaleDialogState extends State<_CustomSaleDialog> {
     }
   }
 
-  String _money(double v) => NumberFormat('#,##0', 'en_US').format(v);
+  String _money(double v) => NumberFormat('#,##0', 'fa_IR').format(v);
 
   @override
   Widget build(BuildContext context) {

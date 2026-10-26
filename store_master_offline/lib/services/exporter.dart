@@ -219,7 +219,7 @@ class Exporter {
     required double totalDebtSum,
     required String currency,
   }) {
-    final nf = NumberFormat('#,##0', 'en_US');
+    final nf = NumberFormat('#,##0', 'fa_IR');
     final rowsSb = StringBuffer();
     var idx = 1;
     for (final d in debtors) {
@@ -345,7 +345,7 @@ class Exporter {
     required double debtAmount,
     required String currency,
   }) {
-    final nf = NumberFormat('#,##0', 'en_US');
+    final nf = NumberFormat('#,##0', 'fa_IR');
     final invoiceLabel = invoiceNumber.trim().isEmpty ? transactionId.toString() : invoiceNumber.trim();
     final rowsSb = StringBuffer();
     for (final item in items) {
@@ -433,7 +433,7 @@ class Exporter {
     required double debtAmount,
     required String currency,
   }) {
-    final nf = NumberFormat('#,##0', 'en_US');
+    final nf = NumberFormat('#,##0', 'fa_IR');
     final rowsSb = StringBuffer();
     var idx = 1;
     for (final item in items) {
@@ -518,7 +518,7 @@ class Exporter {
     required String currency,
     required List<Map<String, dynamic>> movements,
   }) {
-    final nf = NumberFormat('#,##0', 'en_US');
+    final nf = NumberFormat('#,##0', 'fa_IR');
     final rowsSb = StringBuffer();
     var idx = 1;
     for (final m in movements) {
@@ -568,7 +568,7 @@ class Exporter {
     required List<Map<String, dynamic>> expenses,
     required double total,
   }) {
-    final nf = NumberFormat('#,##0', 'en_US');
+    final nf = NumberFormat('#,##0', 'fa_IR');
     final rows = StringBuffer();
     var index = 1;
     for (final expense in expenses) {
@@ -601,7 +601,7 @@ class Exporter {
     required int lowStock,
     required List<dynamic> transactions,
   }) {
-    final nf = NumberFormat('#,##0', 'en_US');
+    final nf = NumberFormat('#,##0', 'fa_IR');
     final grossProfit = sales * profitCoeff;
     final netProfit = grossProfit - expenses;
     final rows = StringBuffer();
@@ -1003,7 +1003,7 @@ class Exporter {
       final fonts = await _loadPdfFonts();
       final regular = fonts['regular']!;
       final bold = fonts['bold']!;
-      final nf = NumberFormat('#,##0', 'en_US');
+      final nf = NumberFormat('#,##0', 'fa_IR');
       final invoiceLabel = invoiceNumber.trim().isEmpty ? transactionId.toString() : invoiceNumber.trim();
       final pdf = pw.Document(
         title: 'فاکتور شماره $invoiceLabel',
@@ -1632,7 +1632,7 @@ class Exporter {
       final fonts = await _loadPdfFonts();
       final regular = fonts['regular']!;
       final bold = fonts['bold']!;
-      final nf = NumberFormat('#,##0', 'en_US');
+      final nf = NumberFormat('#,##0', 'fa_IR');
       final isPurchase = invoiceType.toUpperCase() == 'PURCHASE';
       final documentTitle = isPurchase ? 'رسید خرید' : 'رسید فروش';
       final customerLabel = isPurchase ? 'تأمین‌کننده' : 'مشتری';

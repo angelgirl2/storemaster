@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StoreMaster.Server.Data;
 using StoreMaster.Server.Models;
+using StoreMaster.Server.Services;
 
 namespace StoreMaster.Server.Controllers;
 
@@ -61,6 +62,11 @@ public sealed class AdminSupportController : ControllerBase
         db.SupportMessages.Add(new SupportMessage { TicketId = ticket.Id, SenderRole = "ADMIN", SenderName = "پشتیبانی StoreMaster", Message = x.Message.Trim() });
         ticket.Status = "WAITING_CUSTOMER";
         await db.SaveChangesAsync();
+        var storeId = await AppNotificationStore.FindStoreIdAsync(db, ticket.StoreCode, ticket.LicenseId);
+        if (storeId.HasValue)
+            await AppNotificationStore.PublishAsync(db, storeId.Value, "ticket_reply", "پاسخ جدید پشتیبانی",
+                $"برای تیکت {ticket.TicketCode} پاسخ جدید ثبت شد.", "{}",
+                $"ticket-reply:{ticket.TicketCode}:{ticket.Status}:{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
         return Ok(new { success = true });
     }
 
@@ -75,6 +81,13 @@ public sealed class AdminSupportController : ControllerBase
         if (ticket == null) return NotFound(new { message = "تیکت پیدا نشد." });
         ticket.Status = status;
         await db.SaveChangesAsync();
+        var storeId = await AppNotificationStore.FindStoreIdAsync(db, ticket.StoreCode, ticket.LicenseId);
+        if (storeId.HasValue)
+            await AppNotificationStore.PublishAsync(db, storeId.Value,
+                status == "CLOSED" ? "ticket_closed" : "ticket_status_changed",
+                status == "CLOSED" ? "تیکت بسته شد" : "وضعیت تیکت تغییر کرد",
+                $"وضعیت تیکت {ticket.TicketCode} به {status} تغییر کرد.", "{}",
+                $"ticket-status:{ticket.TicketCode}:{status}:{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
         return Ok(new { success = true, status });
     }
 }

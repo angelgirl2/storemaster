@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StoreMaster.Server.Data;
 using StoreMaster.Server.Models;
+using StoreMaster.Server.Services;
 using System.Net.Http.Json;
 
 namespace StoreMaster.Server.Controllers;
@@ -98,6 +99,11 @@ public class SupportController : ControllerBase
         db.SupportMessages.Add(new SupportMessage { TicketId = ticket.Id, SenderRole = "CUSTOMER", SenderName = ticket.Username, Message = text });
         ticket.Status = "WAITING_ADMIN";
         await db.SaveChangesAsync();
+        var storeId = await AppNotificationStore.FindStoreIdAsync(db, ticket.StoreCode, ticket.LicenseId);
+        if (storeId.HasValue)
+            await AppNotificationStore.PublishAsync(db, storeId.Value, "ticket_reply", "پیام جدید در تیکت",
+                $"پیام جدیدی برای تیکت {ticket.TicketCode} دریافت شد.", "{}",
+                $"ticket-customer-reply:{ticket.TicketCode}:{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
         await SendTelegram($"💬 پاسخ مشتری در تیکت {ticket.TicketCode}\n{text}");
         await SendBale($"💬 پاسخ مشتری در تیکت {ticket.TicketCode}\n{text}");
         return Ok(new { success = true });

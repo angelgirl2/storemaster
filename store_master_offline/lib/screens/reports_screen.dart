@@ -1413,7 +1413,7 @@ class _DesktopReportWindow extends StatelessWidget {
 // ============================================================================
 
 String _formatMoney(num value, String currency) {
-  final formatted = NumberFormat('#,##0', 'en_US').format(value);
+  final formatted = NumberFormat('#,##0', 'fa_IR').format(value);
 
   return currency.trim().isEmpty ? formatted : '$formatted $currency';
 }

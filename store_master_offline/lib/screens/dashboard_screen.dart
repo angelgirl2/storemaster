@@ -5,6 +5,8 @@
 // ignore_for_file: unused_import
 
 import 'dart:ui' as ui;
+import 'dart:async';
+import '../services/online_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -37,6 +39,150 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  Timer? _liveTimer;
+  Map<String, dynamic> _livePricing = <String, dynamic>{
+    'currency': 'تومان',
+    'prices': <String, num>{'30': 990000, '90': 2490000, '180': 4490000, '365': 7990000},
+  };
+  final List<Map<String, dynamic>> _serverNotifications = <Map<String, dynamic>>[];
+  final Set<int> _seenNotificationIds = <int>{};
+  int _lastNotificationId = 0;
+  int _serverUnreadCount = 0;
+  bool _pricingLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshLiveData(initial: true);
+    _liveTimer = Timer.periodic(const Duration(seconds: 10), (_) => _refreshLiveData());
+  }
+
+  @override
+  void dispose() {
+    _liveTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshLiveData({bool initial = false}) async {
+    if (_pricingLoading) return;
+    _pricingLoading = true;
+    try {
+      final data = await OnlineApiService.instance.fetchPublicPricing();
+      if (mounted && data.isNotEmpty) {
+        setState(() => _livePricing = Map<String, dynamic>.from(data));
+      }
+
+      final api = OnlineApiService.instance;
+      if (OnlineApiService.onlineEnabled && api.isAuthenticated) {
+        final newItems = await api.fetchNotifications(afterId: initial ? 0 : _lastNotificationId);
+        if (mounted && newItems.isNotEmpty) {
+          for (final item in newItems) {
+            final id = (item['id'] as num?)?.toInt() ?? 0;
+            if (id <= 0 || !_seenNotificationIds.add(id)) continue;
+            _serverNotifications.add(item);
+            if (_serverNotifications.length > 100) _serverNotifications.removeAt(0);
+            if (id > _lastNotificationId) _lastNotificationId = id;
+          }
+          if (_lastNotificationId > 0 && _serverNotifications.isNotEmpty) {
+            final maxId = _serverNotifications.fold<int>(0, (value, item) => value > ((item['id'] as num?)?.toInt() ?? 0) ? value : ((item['id'] as num?)?.toInt() ?? 0));
+            if (maxId > _lastNotificationId) _lastNotificationId = maxId;
+          }
+        }
+        final unread = await api.unreadNotificationCount();
+        if (mounted) setState(() => _serverUnreadCount = unread);
+      }
+    } catch (_) {
+      // The dashboard must remain usable in offline mode.
+    } finally {
+      _pricingLoading = false;
+    }
+  }
+
+  void _showNotifications() {
+    final serverItems = List<Map<String, dynamic>>.from(_serverNotifications)
+      ..sort((a, b) => ((b['id'] as num?)?.toInt() ?? 0).compareTo((a['id'] as num?)?.toInt() ?? 0));
+    final allMessages = <String>[
+      ...serverItems.map((item) {
+        final title = '${item['title'] ?? 'اعلان Store Master'}';
+        final message = '${item['message'] ?? ''}';
+        final when = (item['createdAt'] as num?)?.toInt();
+        final date = when == null ? '' : '\n${ShamsiDateUtils.date(DateTime.fromMillisecondsSinceEpoch(when))}';
+        return '$title\n$message$date';
+      }),
+    ];
+    // Opening the inbox marks all visible server notifications as read.
+    for (final item in serverItems) {
+      final id = (item['id'] as num?)?.toInt() ?? 0;
+      if (id > 0 && item['isRead'] != true) {
+        unawaited(OnlineApiService.instance.markNotificationRead(id));
+        item['isRead'] = true;
+      }
+    }
+    _serverUnreadCount = 0;
+    if (mounted) setState(() {});
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(children: [const Icon(Icons.notifications_active_outlined), const SizedBox(width: 8), const Text('اعلان‌ها')]),
+        content: SizedBox(
+          width: 420,
+          child: allMessages.isEmpty
+              ? const Text('اعلان جدیدی دریافت نشده است. اعلان‌های لایسنس، همگام‌سازی، چاپ و تیکت‌ها هنگام اتصال به سرور نمایش داده می‌شوند.')
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: allMessages.length,
+                  separatorBuilder: (_, __) => const Divider(height: 12),
+                  itemBuilder: (_, index) => ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.notifications_none),
+                    title: Text(allMessages[index]),
+                  ),
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () {
+            setState(() {
+              _serverNotifications.clear();
+              _seenNotificationIds.clear();
+            });
+            Navigator.pop(dialogContext);
+          }, child: const Text('پاک کردن اعلان‌ها')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('بستن')),
+        ],
+      ),
+    );
+  }
+
+  Widget _liveLicensePricingCard() {
+    final prices = _livePricing['prices'];
+    if (prices is! Map || prices.isEmpty) return const SizedBox.shrink();
+    final entries = prices.entries.toList()
+      ..sort((a, b) => (int.tryParse('${a.key}') ?? 0).compareTo(int.tryParse('${b.key}') ?? 0));
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            const Icon(Icons.sell_outlined),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('قیمت لایسنس‌ها', style: TextStyle(fontWeight: FontWeight.bold))),
+            IconButton(onPressed: _refreshLiveData, tooltip: 'به‌روزرسانی قیمت', icon: const Icon(Icons.refresh)),
+          ]),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: entries.map((entry) {
+              final days = int.tryParse('${entry.key}') ?? 0;
+              final value = (entry.value as num?)?.toDouble() ?? double.tryParse('${entry.value}') ?? 0;
+              return Chip(label: Text('$days روز: ${NumberFormat('#,##0', 'fa_IR').format(value)} ${_livePricing['currency'] ?? 'تومان'}'));
+            }).toList(),
+          ),
+        ]),
+      ),
+    );
+  }
+
   void _openSupport() {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SupportChatScreen()));
   }
@@ -136,6 +282,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 1,
         actions: [
+          IconButton(
+            tooltip: 'اعلان‌ها',
+            onPressed: _showNotifications,
+            icon: Badge(
+              isLabelVisible: _serverUnreadCount > 0,
+              label: Text(_serverUnreadCount > 99 ? '99+' : '$_serverUnreadCount'),
+              child: const Icon(Icons.notifications_none_rounded),
+            ),
+          ),
           PopupMenuButton<String>(
             iconColor: Theme.of(context).colorScheme.onSurface,
             onSelected: (value) => _onMenu(context, vm, value),
@@ -215,6 +370,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _liveLicensePricingCard(),
               // =================================================================
               // کارت کاربر
               // =================================================================
@@ -975,7 +1131,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     num value,
     String currency,
   ) {
-    final formatted = NumberFormat('#,##0', 'en_US').format(value);
+    final formatted = NumberFormat('#,##0', 'fa_IR').format(value);
 
     return currency.trim().isEmpty ? formatted : '$formatted $currency';
   }
@@ -1512,7 +1668,7 @@ class _ShiftCard extends StatelessWidget {
   String _formatNumber(double value) {
     return NumberFormat(
       '#,##0',
-      'en_US',
+      'fa_IR',
     ).format(value);
   }
 }
