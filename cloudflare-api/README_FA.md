@@ -34,18 +34,18 @@ Workflow به‌شکل idempotent این کارها را انجام می‌ده�
 1. بررسی نحوی JavaScript و اجرای تست‌ها؛
 2. ساخت `storemaster-prod` در D1 و `storemaster-files` در R2 فقط در صورت نبودن؛
 3. درج/به‌روزرسانی schema از `migrations/`؛
-4. deploy کردن Worker با نام `storemaster-api`؛
+4. deploy کردن Worker با نام `storemaster`؛
 5. تنظیم Secretهای runtime روی Worker.
 
 توکن Cloudflare در مخزن ذخیره نمی‌شود؛ GitHub Actions آن را از Secrets می‌خواند.
 
-پس از سبز شدن Workflow، در **Cloudflare Dashboard → Workers & Pages → storemaster-api → Settings/Domains & Routes** آدرس Worker را ببین. اگر `workers.dev` حساب فعال باشد، URL معمولاً به این شکل است:
+پس از سبز شدن Workflow، در **Cloudflare Dashboard → Workers & Pages → storemaster → Settings/Domains & Routes** آدرس Worker را ببین. اگر `workers.dev` حساب فعال باشد، URL معمولاً به این شکل است:
 
-`https://storemaster-api.<account-subdomain>.workers.dev`
+`https://storemaster.<account-subdomain>.workers.dev`
 
 `<account-subdomain>` را از داشبورد خودت کپی کن، حدس نزن. برای تست health باز کن:
 
-`https://storemaster-api.<account-subdomain>.workers.dev/health`
+`https://storemaster.<account-subdomain>.workers.dev/health`
 
 ### ۳) دامنهٔ اختصاصی
 
@@ -59,7 +59,7 @@ Workflow به‌شکل idempotent این کارها را انجام می‌ده�
 # از پوشه store_master_offline
 flutter build apk --release `
   --dart-define=STORE_MASTER_ONLINE_ENABLED=true `
-  --dart-define=STORE_MASTER_API_URL=https://storemaster-api.YOUR_ACCOUNT_SUBDOMAIN.workers.dev
+  --dart-define=STORE_MASTER_API_URL=https://storemaster.YOUR_ACCOUNT_SUBDOMAIN.workers.dev
 ```
 
 برای برنامهٔ مدیریت ویندوز:
@@ -68,7 +68,7 @@ flutter build apk --release `
 # از پوشه store_master_admin
 flutter build windows --release `
   --dart-define=STORE_MASTER_ADMIN_ONLINE_ENABLED=true `
-  --dart-define=STORE_MASTER_API_URL=https://storemaster-api.YOUR_ACCOUNT_SUBDOMAIN.workers.dev `
+  --dart-define=STORE_MASTER_API_URL=https://storemaster.YOUR_ACCOUNT_SUBDOMAIN.workers.dev `
   --dart-define=STORE_MASTER_ADMIN_KEY=YOUR_ADMIN_KEY
 ```
 

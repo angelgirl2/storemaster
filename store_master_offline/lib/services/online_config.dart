@@ -7,7 +7,7 @@ class OnlineConfig {
   static final instance = OnlineConfig._();
   OnlineConfig._();
   String baseUrl = const String.fromEnvironment('STORE_MASTER_API_URL',
-      defaultValue: 'http://localhost:8080');
+      defaultValue: 'https://storemaster.angelgirl2-bigsister-1383200784.workers.dev');
   String fallbackUrl = const String.fromEnvironment(
     'STORE_MASTER_API_FALLBACK_URL',
     defaultValue: '',

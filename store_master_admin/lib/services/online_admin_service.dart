@@ -11,7 +11,7 @@ class OnlineAdminService {
 
   String baseUrl = const String.fromEnvironment(
     'STORE_MASTER_API_URL',
-    defaultValue: 'http://localhost:8080',
+    defaultValue: 'https://storemaster.angelgirl2-bigsister-1383200784.workers.dev',
   );
   String fallbackUrl = const String.fromEnvironment(
     'STORE_MASTER_API_FALLBACK_URL',
@@ -36,6 +36,13 @@ class OnlineAdminService {
     String path, {
     Map<String, dynamic>? body,
   }) async {
+    if (onlineEnabled &&
+        (adminKey.trim().length < 32 || adminKey == 'CHANGE_THIS_ADMIN_KEY')) {
+      throw StateError(
+        'کلید مدیریت آنلاین تنظیم نشده است. برنامه مدیر را با '
+        '--dart-define=STORE_MASTER_ADMIN_KEY=<همان ADMIN_KEY در Cloudflare> دوباره بسازید.',
+      );
+    }
     final bases = _baseUrls;
     if (bases.isEmpty) throw Exception('نشانی API تنظیم نشده است.');
     final normalizedPath = path.replaceFirst(RegExp(r'^/+'), '');
@@ -76,7 +83,7 @@ class OnlineAdminService {
               : <String, dynamic>{'data': decoded};
         }
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw HttpException(data['message']?.toString() ?? data['error']?.toString() ?? 'خطای سرور', uri: uri);
+          throw HttpException('HTTP ' + response.statusCode.toString() + ': ' + (data['message']?.toString() ?? data['error']?.toString() ?? 'خطای سرور'), uri: uri);
         }
         return data;
       } catch (error) {

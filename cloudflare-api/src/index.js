@@ -227,7 +227,7 @@ async function adminProvision(req, env) {
 async function licenseCreateByDevice(req, env) {
   await requireAdmin(req, env);
   const x = await readBody(req);
-  const deviceId = String(x.deviceId || '').trim();
+  const deviceId = String(x.deviceId || '').trim().toUpperCase();
   if (!deviceId) return err(400, 'DeviceId الزامی است.');
   if (Number(x.maxUsers || 0) <= 0) return err(400, 'حداکثر کاربران باید بیشتر از صفر باشد.');
 
@@ -355,8 +355,8 @@ async function handle(req, env) {
     const c=await requireAuth(req,env), x=await readBody(req); await env.DB.prepare('UPDATE user_devices SET active=0 WHERE store_id=? AND user_id=? AND device_id=?').bind(sid(c),uid(c),String(x.deviceId||'')).run(); return json({success:true});
   }
   if(r==='licenses/activate'&&method==='POST') {
-    const x=await readBody(req), lic=await env.DB.prepare('SELECT * FROM licenses WHERE license_id=?').bind(String(x.licenseId||'')).first();
-    if(!lic)return err(404,'لایسنس پیدا نشد'); const dev=await env.DB.prepare('SELECT id FROM user_devices WHERE store_id=? AND device_id=? AND active=1').bind(lic.store_id,String(x.deviceId||'')).first();
+    const x=await readBody(req), licenseId=String(x.licenseId||'').trim().toUpperCase(), deviceId=String(x.deviceId||'').trim().toUpperCase(), lic=await env.DB.prepare('SELECT * FROM licenses WHERE license_id=?').bind(licenseId).first();
+    if(!lic)return err(404,'لایسنس پیدا نشد'); const dev=await env.DB.prepare('SELECT id FROM user_devices WHERE store_id=? AND device_id=? AND active=1').bind(lic.store_id,deviceId).first();
     if(!dev)return err(401,'دستگاه با لایسنس ثبت نشده است'); const active=lic.status==='ACTIVE'&&Date.parse(lic.expires_at)>Date.now();
     return json({valid:active,status:active?'ACTIVE':lic.status!=='ACTIVE'?lic.status:'EXPIRED',activationMode:'ONLINE',storeCode:lic.license_id,username:lic.username,recoveryCode:lic.recovery_code,licenseId:lic.license_id,licensePlan:lic.plan,licenseExpiresAt:millis(lic.expires_at),serverTime:Date.now(),features:parseJson(lic.features_json,[]),businessTypes:parseJson(lic.business_types_json,['*'])});
   }
@@ -364,7 +364,7 @@ async function handle(req, env) {
     const x=await readBody(req), code=String(x.code||'').trim().toUpperCase();
     const lic=await env.DB.prepare('SELECT * FROM licenses WHERE activation_code=? OR license_id=?').bind(code,code).first();
     if(!lic)return err(404,'کد فعال‌سازی پیدا نشد.'); if(lic.status!=='ACTIVE')return err(403,`وضعیت لایسنس ${lic.status} است.`); if(Date.parse(lic.expires_at)<=Date.now())return err(403,'اعتبار لایسنس به پایان رسیده است.');
-    const device=await env.DB.prepare('SELECT * FROM user_devices WHERE store_id=? AND device_id=? AND active=1').bind(lic.store_id,String(x.deviceId||'')).first();
+    const device=await env.DB.prepare('SELECT * FROM user_devices WHERE store_id=? AND device_id=? AND active=1').bind(lic.store_id,String(x.deviceId||'').trim().toUpperCase()).first();
     if(!device)return err(401,'این Device ID برای این لایسنس ثبت نشده است.'); if(lic.activation_code_used)return err(409,'این کد فعال‌سازی قبلاً استفاده شده است.');
     const user=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(device.user_id).first(), store=await env.DB.prepare('SELECT * FROM stores WHERE id=?').bind(lic.store_id).first();
     if(!user||!store)return err(404,'اطلاعات فروشگاه کامل نیست.'); const password=lic.initial_password||randomReadable(10), username=lic.username||'admin';

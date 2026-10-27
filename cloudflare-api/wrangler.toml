@@ -1,4 +1,4 @@
-name = "storemaster-api"
+name = "storemaster"
 main = "src/index.js"
 compatibility_date = "2026-10-26"
 compatibility_flags = ["nodejs_compat"]
